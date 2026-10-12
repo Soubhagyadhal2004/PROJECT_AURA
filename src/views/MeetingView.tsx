@@ -5,6 +5,7 @@ import { clock, dateTime, relativeTime } from "../lib/format";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { Segmenter } from "../lib/segmenter";
 import { LiveTranscriber } from "../lib/live-transcriber";
+import MeetingNotes from "../components/MeetingNotes";
 import { setFaviconState } from "../lib/favicon";
 import { useLiveAPIContext } from "../contexts/LiveAPIContext";
 import ConfirmButton from "../components/ConfirmButton";
@@ -347,11 +348,12 @@ function MeetingDetail({
   useEffect(() => {
     load();
   }, [load]);
+  const memorizing = m?.memoryStatus === "running";
   useEffect(() => {
-    if (!recordingThis && !pending && !rec.uploads && !refining) return;
+    if (!recordingThis && !pending && !rec.uploads && !refining && !memorizing) return;
     const t = setInterval(load, 1500);
     return () => clearInterval(t);
-  }, [recordingThis, pending, rec.uploads, refining, load]);
+  }, [recordingThis, pending, rec.uploads, refining, memorizing, load]);
 
   const segCount = m?.segments.length ?? 0;
   useEffect(() => {
@@ -435,6 +437,21 @@ function MeetingDetail({
             Retry
           </button>
         </div>
+      )}
+
+      {!recordingThis && (
+        <MeetingNotes
+          m={m}
+          transcriptBusy={pending > 0 || rec.uploads > 0}
+          onUpdated={(x) => {
+            if (x.title !== m.title) {
+              setTitle(x.title);
+              onChanged(); // the list shows the new title
+            }
+            setM(x);
+          }}
+          onError={onError}
+        />
       )}
 
       {m.speakers.length > 0 && (

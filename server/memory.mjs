@@ -52,6 +52,7 @@ const rowOut = (r) => ({
   supersededBy: r.superseded_by,
   source: r.source,
   conversationId: r.conversation_id,
+  meetingId: r.meeting_id ?? null,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -70,7 +71,7 @@ export function getMemory(id) {
 
 const norm = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
-export async function addMemory({ content, category = "other", source = "manual", conversationId = null }) {
+export async function addMemory({ content, category = "other", source = "manual", conversationId = null, meetingId = null }) {
   const t = now();
   const emb = await tryEmbed(content);
   // safety net against the extractor storing the same fact twice
@@ -83,10 +84,10 @@ export async function addMemory({ content, category = "other", source = "manual"
   }
   const info = db
     .prepare(
-      `INSERT INTO memories(content, category, status, source, conversation_id, embedding, created_at, updated_at)
-       VALUES (?, ?, 'active', ?, ?, ?, ?, ?)`
+      `INSERT INTO memories(content, category, status, source, conversation_id, meeting_id, embedding, created_at, updated_at)
+       VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)`
     )
-    .run(content.trim(), CATEGORIES.includes(category) ? category : "other", source, conversationId, f32ToBlob(emb), t, t);
+    .run(content.trim(), CATEGORIES.includes(category) ? category : "other", source, conversationId, meetingId, f32ToBlob(emb), t, t);
   return getMemory(info.lastInsertRowid);
 }
 
@@ -121,10 +122,11 @@ export function deleteAllMemories() {
 }
 
 /** Replace an outdated fact with a new one, keeping the old one as history. */
-async function supersede(oldId, content, category, conversationId) {
+// origin: { source: "conversation" | "meeting", conversationId?, meetingId? }
+async function supersede(oldId, content, category, origin) {
   const old = db.prepare("SELECT * FROM memories WHERE id = ? AND status = 'active'").get(oldId);
-  if (!old) return addMemory({ content, category, source: "conversation", conversationId });
-  const created = await addMemory({ content, category: category || old.category, source: "conversation", conversationId });
+  if (!old) return addMemory({ content, category, ...origin });
+  const created = await addMemory({ content, category: category || old.category, ...origin });
   if (created.id === oldId) return created; // same fact restated: nothing to replace
   db.prepare("UPDATE memories SET status = 'superseded', superseded_by = ?, updated_at = ? WHERE id = ?").run(
     created.id,
@@ -246,23 +248,31 @@ export async function extractFromConversation(conversationId) {
   ].join("\n");
 
   const out = await generateJSON({ system: EXTRACT_SYSTEM, prompt, schema: EXTRACT_SCHEMA });
+  const applied = await applyOperations(out.operations, candidates, { source: "conversation", conversationId, meetingId: null });
+  db.prepare("UPDATE conversations SET extracted_upto = ? WHERE id = ?").run(lastId, conversationId);
+  if (applied.length) console.log(`[memory] conversation ${conversationId}:`, applied.map((a) => a.op).join(", "));
+  return applied;
+}
+
+/** Apply the extractor's operations. Only memories the model was shown (candidates) can be changed. */
+async function applyOperations(operations, candidates, origin) {
   const applied = [];
   const known = new Set(candidates.map((c) => c.id));
   const confirm = getSettings().confirmMemoryChanges;
-  for (const op of out.operations || []) {
+  for (const op of operations || []) {
     const content = String(op.content || "").trim();
     try {
       // changes to facts the user already has: ask first
       if (confirm && ["update", "retire", "forget"].includes(op.action) && known.has(op.memory_id)) {
         if (op.action === "update" && !content) continue;
-        const p = propose({ action: op.action, memoryId: op.memory_id, content, category: op.category, conversationId });
+        const p = propose({ action: op.action, memoryId: op.memory_id, content, category: op.category, ...origin });
         if (p) applied.push({ op: "proposed", proposal: p });
         continue;
       }
       if (op.action === "add" && content) {
-        applied.push({ op: "add", memory: await addMemory({ content, category: op.category, source: "conversation", conversationId }) });
+        applied.push({ op: "add", memory: await addMemory({ content, category: op.category, ...origin }) });
       } else if (op.action === "update" && content && known.has(op.memory_id)) {
-        applied.push({ op: "update", replaced: op.memory_id, memory: await supersede(op.memory_id, content, op.category, conversationId) });
+        applied.push({ op: "update", replaced: op.memory_id, memory: await supersede(op.memory_id, content, op.category, origin) });
       } else if (op.action === "retire" && known.has(op.memory_id)) {
         db.prepare("UPDATE memories SET status = 'outdated', updated_at = ? WHERE id = ? AND status = 'active'").run(now(), op.memory_id);
         applied.push({ op: "retire", id: op.memory_id });
@@ -274,8 +284,73 @@ export async function extractFromConversation(conversationId) {
       console.error("[memory] failed to apply", op, e.message);
     }
   }
-  db.prepare("UPDATE conversations SET extracted_upto = ? WHERE id = ?").run(lastId, conversationId);
-  if (applied.length) console.log(`[memory] conversation ${conversationId}:`, applied.map((a) => a.op).join(", "));
+  return applied;
+}
+
+const MEETING_SYSTEM = `You maintain the long-term memory of AURA, a personal assistant, about its single user.
+You receive the transcript of a meeting the user recorded with AURA, plus existing memories that may be related.
+Decide which durable facts from this meeting are worth remembering for future conversations.
+
+Speaker names come from voice recognition and can be wrong. "Speaker N" means an unidentified person.
+Only attribute a statement to a named person when the transcript labels it with that name; otherwise write "someone in the meeting".
+The transcript may be in Hindi, English or a mix; always write memories in English.
+
+Store: facts about the user, people they met and what those people said about themselves (roles, preferences, plans),
+decisions that were made, commitments and deadlines (who will do what, by when), and plans with dates.
+Do NOT store: small talk, jokes, greetings, questions without answers, or details that only matter inside the meeting.
+Usually a meeting gives 0 to 8 memories; prefer fewer, more useful ones.
+
+Write each memory as one short self-contained sentence in the third person that names the meeting date,
+e.g. "In the meeting on 13 Oct 2026, Vaibhav said he is vegetarian." or "The user agreed to send the budget to Basant by 20 Oct 2026."
+
+Operations:
+- "add": a new fact that is not already stored.
+- "update": an existing memory (memory_id) has changed; content is the full new fact. The old one is kept as history.
+- "retire": an existing memory (memory_id) is clearly no longer true and there is no replacement.
+Never use "forget" for meetings. If a fact is already stored with the same meaning, do nothing. Return an empty list when nothing is worth storing.`;
+
+/**
+ * Learn from a finished meeting.
+ * lines: [{ speaker, text }] in order; startedAt: ms epoch.
+ */
+export async function extractFromMeeting({ meetingId, title, startedAt, lines }) {
+  const spoken = lines.filter((l) => String(l.text || "").trim());
+  if (!spoken.length) return [];
+  const s = getSettings();
+  const all = spoken.map((l) => `${l.speaker}: ${l.text}`);
+  // long meetings: keep the request a sane size (the start and the end carry most decisions)
+  const MAX = 60000;
+  let transcript = all.join("\n");
+  if (transcript.length > MAX) {
+    const head = all.slice(0, Math.floor(all.length * 0.6)).join("\n").slice(0, MAX * 0.6);
+    const tail = all.join("\n").slice(-MAX * 0.4);
+    transcript = `${head}\n[... middle of the meeting left out ...]\n${tail}`;
+  }
+  const related = await searchMemories(spoken.map((l) => l.text).join(" ").slice(0, 3000), 12);
+  const recent = coreMemories(8);
+  const candidates = [...new Map([...related, ...recent].map((m) => [m.id, m])).values()];
+  const date = new Date(startedAt);
+  const prompt = [
+    `Meeting: ${title}`,
+    `Meeting date: ${date.toDateString()} (${date.toISOString().slice(0, 10)})`,
+    s.userName
+      ? `The user's name is ${s.userName}. Lines labelled "${s.userName}" are the user.`
+      : `The user's name is not known; don't assume which speaker is the user.`,
+    "",
+    "Existing related memories:",
+    candidates.length ? candidates.map((m) => `[${m.id}] (${m.category}) ${m.content}`).join("\n") : "(none)",
+    "",
+    "Transcript:",
+    transcript,
+  ].join("\n");
+  const out = await generateJSON({ system: MEETING_SYSTEM, prompt, schema: EXTRACT_SCHEMA });
+  const ops = (out.operations || []).filter((o) => o.action !== "forget");
+  const applied = await applyOperations(ops, candidates, { source: "meeting", conversationId: null, meetingId });
+  if (applied.length) {
+    console.log(`[memory] meeting ${meetingId}:`, applied.map((a) => a.op).join(", "));
+    extractionLog.unshift({ at: now(), meetingId, applied });
+    extractionLog.length = Math.min(extractionLog.length, 20);
+  }
   return applied;
 }
 
@@ -290,12 +365,13 @@ const proposalOut = (r) => ({
   content: r.content,
   category: r.category,
   conversationId: r.conversation_id,
+  meetingId: r.meeting_id ?? null,
   status: r.status,
   createdAt: r.created_at,
   current: getMemory(r.memory_id),
 });
 
-function propose({ action, memoryId, content, category, conversationId }) {
+function propose({ action, memoryId, content, category, conversationId = null, meetingId = null }) {
   const target = db.prepare("SELECT * FROM memories WHERE id = ? AND status = 'active'").get(memoryId);
   if (!target) return null;
   if (action === "update" && norm(content) === norm(target.content)) return null; // nothing changes
@@ -308,8 +384,8 @@ function propose({ action, memoryId, content, category, conversationId }) {
   // a newer proposal for the same memory replaces an older pending one
   db.prepare("DELETE FROM memory_proposals WHERE memory_id = ? AND status = 'pending'").run(memoryId);
   const id = db
-    .prepare("INSERT INTO memory_proposals(action, memory_id, content, category, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(action, memoryId, content || null, CATEGORIES.includes(category) ? category : null, conversationId, now()).lastInsertRowid;
+    .prepare("INSERT INTO memory_proposals(action, memory_id, content, category, conversation_id, meeting_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(action, memoryId, content || null, CATEGORIES.includes(category) ? category : null, conversationId, meetingId, now()).lastInsertRowid;
   return proposalOut(db.prepare("SELECT * FROM memory_proposals WHERE id = ?").get(id));
 }
 
@@ -339,7 +415,11 @@ export async function acceptProposal(id, { content } = {}) {
   if (p.action === "update") {
     const text = String(content ?? p.content ?? "").trim();
     if (!text) throw Object.assign(new Error("The new memory can't be empty."), { status: 400 });
-    result = await supersede(p.memory_id, text, p.category, p.conversation_id);
+    result = await supersede(p.memory_id, text, p.category, {
+      source: p.meeting_id ? "meeting" : "conversation",
+      conversationId: p.conversation_id,
+      meetingId: p.meeting_id ?? null,
+    });
   } else if (p.action === "retire") {
     db.prepare("UPDATE memories SET status = 'outdated', updated_at = ? WHERE id = ? AND status = 'active'").run(now(), p.memory_id);
   } else if (p.action === "forget") {

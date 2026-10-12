@@ -130,6 +130,14 @@ addColumn("speaker_profiles", "model", "TEXT"); // speaker model that produced t
 addColumn("segments", "embedding", "BLOB"); // voice embedding, used to refine speakers after a meeting
 addColumn("segments", "manual", "INTEGER NOT NULL DEFAULT 0"); // speaker set by the user, never changed automatically
 addColumn("meetings", "refined", "INTEGER NOT NULL DEFAULT 0"); // speakers re-checked after the meeting ended
+addColumn("meetings", "minutes", "TEXT"); // JSON: minutes of meeting written by Gemini
+addColumn("meetings", "minutes_at", "INTEGER");
+// memory extraction from the transcript: NULL (not run) | running | done | error | off
+addColumn("meetings", "memory_status", "TEXT");
+addColumn("meetings", "memory_count", "INTEGER NOT NULL DEFAULT 0");
+addColumn("meetings", "memory_error", "TEXT");
+addColumn("memories", "meeting_id", "INTEGER REFERENCES meetings(id) ON DELETE SET NULL"); // learned from this meeting
+addColumn("memory_proposals", "meeting_id", "INTEGER REFERENCES meetings(id) ON DELETE SET NULL");
 
 export const now = () => Date.now();
 
@@ -159,14 +167,16 @@ export const DEFAULT_SETTINGS = {
   // ask before an existing memory is changed, marked outdated or deleted
   confirmMemoryChanges: true,
   // cosine similarity (WeSpeaker embeddings) needed to attach a registered name to a voice
-  voiceMatchThreshold: 0.5,
+  voiceMatchThreshold: 0.58,
   // cosine similarity needed to treat a piece of speech as an already-heard voice
-  voiceClusterThreshold: 0.45,
+  voiceClusterThreshold: 0.55,
   // optional hint for meeting transcription, e.g. "English and Hindi"
   meetingLanguage: "",
   // "live": Gemini 3.5 Transcribe Live (streaming, no daily request cap on the free tier)
   // "standard": batched requests to GEMINI_TRANSCRIBE_MODEL
   meetingTranscriber: "live",
+  // after a meeting, store durable facts from its transcript in long-term memory (needs autoMemory too)
+  meetingMemory: true,
 };
 
 export function getSettings() {

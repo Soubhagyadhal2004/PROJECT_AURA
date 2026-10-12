@@ -133,6 +133,18 @@ export default function SettingsPanel({ open, onClose, health, onDataChanged }: 
                   placeholder="e.g. English and Hindi, Hindi words in Latin script"
                 />
               </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={s.meetingMemory}
+                  disabled={!s.autoMemory}
+                  onChange={(e) => update({ meetingMemory: e.target.checked })}
+                />
+                <span>
+                  After a meeting, add decisions, plans and facts from it to memory (one {health?.geminiModels.text || "Gemini Flash-Lite"} request per meeting)
+                  {!s.autoMemory && " — needs automatic memories turned on"}
+                </span>
+              </label>
               <label className="field">
                 <span>
                   Name a registered voice from similarity <strong>{s.voiceMatchThreshold.toFixed(2)}</strong>

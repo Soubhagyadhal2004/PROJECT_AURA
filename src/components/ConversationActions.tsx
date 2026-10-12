@@ -105,7 +105,7 @@ export function ConversationActions({
                 role="menuitem"
                 onClick={() => {
                   setMenu(false);
-                  downloadFile(`/api/conversations/${conv.id}/export?format=${fmt}`, `conversation.${fmt}`).catch((e) => alert(e.message));
+                  downloadFile(`/api/conversations/${conv.id}/export?format=${fmt}`, `conversation.${fmt}`).catch((e: Error) => alert(e.message));
                 }}
               >
                 {label}

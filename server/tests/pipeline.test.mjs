@@ -67,12 +67,16 @@ mock.module(new URL("../models.mjs", import.meta.url).href, {
 
 const geminiCalls = { json: [], transcribe: 0 };
 let nextOps = [];
+let nextMeetingOps = []; // what the meeting memory extractor returns
+let nextMinutes = null; // what the minutes writer returns
 mock.module(new URL("../gemini.mjs", import.meta.url).href, {
   namedExports: {
     hasKey: () => true,
     createLiveToken: async () => ({ token: "auth_tokens/fake", expiresAt: Date.now() + 1000 }),
     generateJSON: async (args) => {
       geminiCalls.json.push(args);
+      if (args.schema?.properties?.summary) return nextMinutes;
+      if (/transcript of a meeting/.test(args.system || "")) return { operations: nextMeetingOps };
       return { operations: nextOps };
     },
     transcribeSegments: async (bufs, opts) => {
@@ -436,6 +440,129 @@ test("web search sources are stored with assistant messages", async () => {
   const setup = (await j("GET", "/api/live/setup")).data;
   assert.equal(setup.webSearch, true);
   assert.match(setup.systemInstruction, /Google Search/);
+});
+
+// a finished, transcribed two-person meeting that started at `startedAt`
+async function finishedMeeting(title, startedAt) {
+  const m = (await j("POST", "/api/meetings", { title })).data;
+  await j("POST", `/api/meetings/${m.id}/segments?start=0&end=5000`, turnsPcm([[21, 2.5], [22, 2.5]]));
+  await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.segments.length === 2 && settled(x);
+  });
+  if (startedAt) {
+    const { db } = await import("../db.mjs");
+    db.prepare("UPDATE meetings SET started_at = ? WHERE id = ?").run(startedAt, m.id);
+  }
+  return m;
+}
+
+test("meeting: when it ends, durable facts go to memory, linked to the meeting", async () => {
+  await j("PUT", "/api/settings", { confirmMemoryChanges: false, userName: "Soubh" });
+  nextMeetingOps = [{ action: "add", content: "In the meeting on 7 Oct 2026, Speaker 2 agreed to send the budget by Friday.", category: "work" }];
+  const m = await finishedMeeting("Budget sync");
+  await j("PATCH", `/api/meetings/${m.id}`, { ended: true });
+  const d = await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.memoryStatus === "done" && x;
+  });
+  assert.equal(d.memoryCount, 1);
+  const call = geminiCalls.json.findLast((c) => /transcript of a meeting/.test(c.system));
+  assert.match(call.prompt, /Speaker 1: words from voice 21/);
+  assert.match(call.prompt, /Speaker 2: words from voice 22/);
+  assert.match(call.prompt, /The user's name is Soubh/);
+  assert.match(call.prompt, /Meeting date:/);
+  const memo = (await j("GET", "/api/memories")).data.find((x) => /send the budget/.test(x.content));
+  assert.equal(memo.meetingId, m.id);
+  assert.equal(memo.source, "meeting");
+  // the assistant's brief for this meeting lists it
+  const brief = (await j("GET", `/api/meetings/${m.id}/brief`)).data;
+  assert.deepEqual(brief.memoriesFromThisMeeting, [memo.content]);
+  assert.match(brief.transcript, /Speaker 2: words from voice 22/);
+  nextMeetingOps = [];
+});
+
+test("meeting: memory from meetings can be switched off and run by hand", async () => {
+  await j("PUT", "/api/settings", { meetingMemory: false });
+  const calls = geminiCalls.json.length;
+  const m = await finishedMeeting("Quiet one");
+  await j("PATCH", `/api/meetings/${m.id}`, { ended: true });
+  const d = await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.refined && x.memoryStatus && x;
+  });
+  assert.equal(d.memoryStatus, "off");
+  assert.equal(geminiCalls.json.length, calls, "nothing sent to Gemini");
+  nextMeetingOps = [{ action: "add", content: "In the meeting on 7 Oct 2026, the team chose Goa for the offsite.", category: "plan" }];
+  const after = (await j("POST", `/api/meetings/${m.id}/memorize`)).data;
+  assert.equal(after.memoryStatus, "done");
+  assert.equal(after.memoryCount, 1);
+  nextMeetingOps = [{ action: "forget", memory_id: 1 }];
+  const again = (await j("POST", `/api/meetings/${m.id}/memorize`)).data;
+  assert.equal(again.memoryCount, 0, "meetings never delete memories");
+  nextMeetingOps = [];
+  await j("PUT", "/api/settings", { meetingMemory: true });
+});
+
+test("meeting: minutes are written, stored, exported and name an untitled meeting", async () => {
+  const m = await finishedMeeting(""); // automatic "Meeting <date>" title
+  assert.match(m.title, /^Meeting \d/);
+  nextMinutes = {
+    suggested_title: "Offsite planning",
+    summary: "The team planned the offsite.",
+    key_points: ["Goa is preferred"],
+    decisions: ["Offsite in Goa"],
+    action_items: [{ task: "Book flights", owner: "Speaker 2", due: "2026-10-20" }, { task: "" }],
+    open_questions: [],
+  };
+  const d = (await j("POST", `/api/meetings/${m.id}/minutes`)).data;
+  assert.equal(d.title, "Offsite planning");
+  assert.equal(d.minutes.summary, "The team planned the offsite.");
+  assert.deepEqual(d.minutes.actionItems, [{ task: "Book flights", owner: "Speaker 2", due: "2026-10-20" }]);
+  assert.ok(d.minutesAt);
+  const call = geminiCalls.json.at(-1);
+  assert.match(call.prompt, /\[00:00\] Speaker \d: words from voice 21/);
+  const md = await fetch(`${B}/api/meetings/${m.id}/export?format=md`).then((r) => r.text());
+  assert.match(md, /## Minutes of meeting/);
+  assert.match(md, /Book flights \| owner: Speaker 2 \| due: 2026-10-20/);
+  assert.match(md, /## Transcript/);
+  // a title the user chose is kept
+  await j("PATCH", `/api/meetings/${m.id}`, { title: "My name" });
+  nextMinutes = { ...nextMinutes, suggested_title: "Something else" };
+  assert.equal((await j("POST", `/api/meetings/${m.id}/minutes`)).data.title, "My name");
+  assert.equal((await j("DELETE", `/api/meetings/${m.id}/minutes`)).data.minutes, null);
+  // nothing to summarise
+  const empty = (await j("POST", "/api/meetings", { title: "Empty" })).data;
+  assert.equal((await j("POST", `/api/meetings/${empty.id}/minutes`)).status, 400);
+});
+
+test("meetings can be found by date range and topic", async () => {
+  const day = (y, mo, d, h = 10) => new Date(y, mo - 1, d, h).getTime();
+  const wed = await finishedMeeting("Design review", day(2026, 10, 7));
+  const thu = await finishedMeeting("Hiring chat", day(2026, 10, 8));
+  const range = (a, b) => `/api/meetings/find?from=${a}&to=${b}`;
+  // "last Wednesday" = 7 Oct 2026, local day
+  let r = (await j("GET", range(day(2026, 10, 7, 0), day(2026, 10, 8, 0) - 1))).data;
+  assert.deepEqual(r.meetings.map((x) => x.id), [wed.id]);
+  assert.match(r.meetings[0].when, /Wednesday,? 7 October 2026/);
+  assert.deepEqual(r.meetings[0].participants.sort(), ["Speaker 1", "Speaker 2"]);
+  assert.match(r.meetings[0].preview, /words from voice/);
+  r = (await j("GET", range(day(2026, 10, 7, 0), day(2026, 10, 9, 0)))).data;
+  assert.deepEqual(r.meetings.map((x) => x.id), [thu.id, wed.id], "newest first");
+  // topic inside the range
+  r = (await j("GET", range(day(2026, 10, 7, 0), day(2026, 10, 9, 0)) + "&q=hiring")).data;
+  assert.equal(r.matchedQuery, true);
+  assert.deepEqual(r.meetings.map((x) => x.id), [thu.id]);
+  // unknown topic: falls back to the date range
+  r = (await j("GET", range(day(2026, 10, 7, 0), day(2026, 10, 9, 0)) + "&q=zebra")).data;
+  assert.equal(r.matchedQuery, false);
+  assert.equal(r.meetings.length, 2);
+  // a day without meetings
+  assert.deepEqual((await j("GET", range(day(2026, 10, 1, 0), day(2026, 10, 2, 0)))).data.meetings, []);
+  // the assistant is told the current date and how to look meetings up
+  const setup = (await j("GET", "/api/live/setup")).data;
+  assert.match(setup.systemInstruction, /Right now it is \w+day,? \d+ \w+ \d{4}/);
+  assert.match(setup.systemInstruction, /find_meetings/);
 });
 
 test("data can be deleted", async () => {

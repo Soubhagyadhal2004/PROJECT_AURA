@@ -78,6 +78,7 @@ export type Settings = {
   voiceClusterThreshold: number;
   meetingLanguage: string;
   meetingTranscriber: "live" | "standard";
+  meetingMemory: boolean;
 };
 
 export type Health = {
@@ -132,6 +133,7 @@ export type MemoryProposal = {
   content: string | null;
   category: string | null;
   conversationId: number | null;
+  meetingId: number | null;
   createdAt: number;
   current: Memory | null;
 };
@@ -144,6 +146,7 @@ export type Memory = {
   supersededBy: number | null;
   source: string;
   conversationId: number | null;
+  meetingId: number | null;
   createdAt: number;
   updatedAt: number;
   score?: number;
@@ -163,6 +166,7 @@ export type MeetingSummary = {
   title: string;
   startedAt: number;
   endedAt: number | null;
+  hasMinutes: boolean;
   segmentCount: number;
   durationMs: number;
 };
@@ -196,6 +200,22 @@ export type Meeting = {
   startedAt: number;
   endedAt: number | null;
   refined: boolean;
+  minutes: Minutes | null;
+  minutesAt: number | null;
+  // learning from the transcript: null = not run yet, off = turned off in Settings
+  memoryStatus: null | "running" | "done" | "error" | "off";
+  memoryCount: number;
+  memoryError: string | null;
   speakers: MeetingSpeaker[];
   segments: Segment[];
+};
+
+export type Minutes = {
+  summary: string;
+  keyPoints: string[];
+  decisions: string[];
+  actionItems: { task: string; owner: string | null; due: string | null }[];
+  openQuestions: string[];
+  suggestedTitle: string | null;
+  lines: number; // transcript lines the minutes were written from
 };

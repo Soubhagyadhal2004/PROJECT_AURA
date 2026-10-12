@@ -108,6 +108,7 @@ export function listMeetings() {
       title: m.title,
       startedAt: m.started_at,
       endedAt: m.ended_at,
+      hasMinutes: !!m.minutes,
       segmentCount: m.segment_count,
       durationMs: m.duration_ms || 0,
     }));
@@ -139,7 +140,39 @@ export function getMeeting(id) {
       error: s.error,
       retryable: (s.status === "error" || s.status === "empty") && !!s.has_audio,
     }));
-  return { id: m.id, title: m.title, startedAt: m.started_at, endedAt: m.ended_at, refined: !!m.refined, speakers, segments };
+  return {
+    id: m.id,
+    title: m.title,
+    startedAt: m.started_at,
+    endedAt: m.ended_at,
+    refined: !!m.refined,
+    minutes: parseMinutes(m.minutes),
+    minutesAt: m.minutes_at ?? null,
+    memoryStatus: m.memory_status ?? null,
+    memoryCount: m.memory_count ?? 0,
+    memoryError: m.memory_error ?? null,
+    speakers,
+    segments,
+  };
+}
+
+export function parseMinutes(raw) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Transcript lines with speaker names, in order. */
+export function meetingLines(id) {
+  const m = getMeeting(id);
+  if (!m) return null;
+  const name = new Map(m.speakers.map((s) => [s.id, s.label]));
+  return m.segments
+    .filter((s) => String(s.text || "").trim())
+    .map((s) => ({ startMs: s.startMs, endMs: s.endMs, speaker: name.get(s.speakerId) || "Unknown speaker", text: s.text.trim() }));
 }
 
 export function updateMeeting(id, { title, ended }) {
@@ -259,6 +292,25 @@ const clock = (ms) => {
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
+function minutesText(mi, md) {
+  if (!mi) return [];
+  const h = (t) => (md ? `### ${t}` : t.toUpperCase());
+  const li = (t) => (md ? `- ${t}` : `  - ${t}`);
+  const out = [md ? "## Minutes of meeting" : "MINUTES OF MEETING", ""];
+  if (mi.summary) out.push(h("Summary"), mi.summary, "");
+  const list = (title, items) => {
+    if (items?.length) out.push(h(title), ...items.map(li), "");
+  };
+  list("Key points", mi.keyPoints);
+  list("Decisions", mi.decisions);
+  list(
+    "Action items",
+    (mi.actionItems || []).map((a) => [a.task, a.owner ? `owner: ${a.owner}` : "", a.due ? `due: ${a.due}` : ""].filter(Boolean).join(" | "))
+  );
+  list("Open questions", mi.openQuestions);
+  return out;
+}
+
 export function exportMeeting(id, format) {
   const m = getMeeting(id);
   if (!m) return null;
@@ -268,13 +320,32 @@ export function exportMeeting(id, format) {
     .map((s) => ({ start: clock(s.startMs), end: clock(s.endMs), speaker: name.get(s.speakerId) || "Unknown", text: s.text }));
   const date = new Date(m.startedAt).toLocaleString();
   if (format === "json") {
-    return { mime: "application/json", ext: "json", body: JSON.stringify({ title: m.title, startedAt: new Date(m.startedAt).toISOString(), segments: rows }, null, 2) };
+    return {
+      mime: "application/json",
+      ext: "json",
+      body: JSON.stringify({ title: m.title, startedAt: new Date(m.startedAt).toISOString(), minutes: m.minutes, segments: rows }, null, 2),
+    };
   }
   if (format === "md") {
-    const body = [`# ${m.title}`, ``, `_${date}_`, ``, ...rows.map((r) => `**${r.speaker}** \`[${r.start}]\`  \n${r.text}\n`)].join("\n");
+    const body = [
+      `# ${m.title}`,
+      ``,
+      `_${date}_`,
+      ``,
+      ...minutesText(m.minutes, true),
+      ...(m.minutes ? ["## Transcript", ""] : []),
+      ...rows.map((r) => `**${r.speaker}** \`[${r.start}]\`  \n${r.text}\n`),
+    ].join("\n");
     return { mime: "text/markdown", ext: "md", body };
   }
-  const body = [m.title, date, "", ...rows.map((r) => `[${r.start} - ${r.end}] ${r.speaker}: ${r.text}`)].join("\n");
+  const body = [
+    m.title,
+    date,
+    "",
+    ...minutesText(m.minutes, false),
+    ...(m.minutes ? ["TRANSCRIPT", ""] : []),
+    ...rows.map((r) => `[${r.start} - ${r.end}] ${r.speaker}: ${r.text}`),
+  ].join("\n");
   return { mime: "text/plain", ext: "txt", body };
 }
 
@@ -592,8 +663,16 @@ async function work() {
       console.error("[meeting] refinement failed:", e.message);
     }
     db.prepare("UPDATE meetings SET refined = 1 WHERE id = ?").run(m.id);
+    try {
+      hooks.finished?.(m.id); // e.g. learn from the meeting
+    } catch (e) {
+      console.error("[meeting] after-meeting hook failed:", e.message);
+    }
   }
 }
+
+/** Set by meeting-notes.mjs: runs once a meeting has ended and its transcript is final. */
+export const hooks = { finished: null };
 
 /**
  * After a meeting: look at every line again with the final voiceprint of each speaker.

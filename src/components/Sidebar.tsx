@@ -43,7 +43,7 @@ export default function Sidebar({ view, onView, historyId, onOpenHistory, histor
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
-        <Logo size={30} level={status === "connected" ? Math.max(outVolume * 4, micOn ? micVolume * 3 : 0) : 0} live={status === "connected"} />
+        <Logo size={36} level={status === "connected" ? Math.max(outVolume * 4, micOn ? micVolume * 3 : 0) : 0} live={status === "connected"} />
       </div>
 
       <nav className="sidebar__nav" aria-label="Main">

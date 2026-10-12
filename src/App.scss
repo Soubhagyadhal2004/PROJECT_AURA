@@ -351,42 +351,36 @@ code {
   width: var(--logo-size);
   height: var(--logo-size);
 }
-.logo__ring,
 .logo__glow {
   position: absolute;
-  inset: 0;
+  inset: -22%;
   border-radius: 50%;
-  background: conic-gradient(from var(--aura-turn), #e8b65a, #f6d99a, #e66a5c, #b98ae6, #7aa7e8, #e8b65a);
-  animation: aura-turn 9s linear infinite;
-}
-.logo__ring {
-  // a ring, thicker on one side so the turning is visible
-  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 47%, #000 49%, #000 66%, transparent 68%);
-  mask: radial-gradient(circle at 50% 50%, transparent 47%, #000 49%, #000 66%, transparent 68%);
-}
-.logo__glow {
-  inset: -18%;
-  filter: blur(calc(var(--logo-size) * 0.22));
-  opacity: calc(0.28 + var(--level) * 0.6);
+  background: conic-gradient(from var(--aura-turn), #5ee7f0, #6aa9ee, #8a84e6, #6aa9ee, #5ee7f0);
+  filter: blur(calc(var(--logo-size) * 0.26));
+  opacity: calc(0.16 + var(--level) * 0.6);
   transform: scale(calc(0.9 + var(--level) * 0.25));
   transition: opacity 120ms linear, transform 120ms linear;
+  animation: aura-turn 9s linear infinite;
 }
-.logo__core {
-  position: absolute;
-  inset: 34%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 38% 34%, #fff4da, #e8b65a 62%, #c98a2c);
-  box-shadow: 0 0 calc(var(--logo-size) * 0.18) rgba(232, 182, 90, 0.7);
+.logo__img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  filter: drop-shadow(0 0 calc(var(--logo-size) * 0.1) rgba(110, 190, 240, calc(0.2 + var(--level) * 0.6)));
+  transition: filter 120ms linear;
 }
-.logo--live .logo__ring,
 .logo--live .logo__glow {
   animation-duration: 3.5s;
+  opacity: calc(0.3 + var(--level) * 0.6);
 }
 .logo__word {
   font-weight: 700;
   font-size: 1.15rem;
   letter-spacing: 0.14em;
-  background: linear-gradient(100deg, #f6e3bd 0%, #e8b65a 45%, #e9a08f 100%);
+  background: linear-gradient(100deg, #9af0f6 0%, #7fb2ee 50%, #a29cf0 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -397,7 +391,6 @@ code {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .logo__ring,
   .logo__glow {
     animation: none;
   }
@@ -1339,6 +1332,124 @@ input[type="checkbox"] {
   &:focus {
     border-color: var(--accent) !important;
   }
+}
+
+// ---- after a meeting: minutes and memory ----
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 6px;
+}
+.notes__ask {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-m);
+}
+.notes__icon {
+  color: var(--accent);
+}
+.notes__ask-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  span {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+}
+.notes__memory {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  > span:nth-child(2) {
+    flex: 1;
+  }
+  .material-symbols-outlined {
+    font-size: 1.15rem;
+  }
+}
+.minutes {
+  padding: 18px 20px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-m);
+  background: var(--panel);
+  h2 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+  h3 {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  ul {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.5;
+  }
+  li + li {
+    margin-top: 3px;
+  }
+}
+.minutes__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  .muted {
+    font-size: 0.85rem;
+  }
+}
+.minutes__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.minutes__summary {
+  max-width: 72ch;
+  margin: 10px 0 14px;
+  line-height: 1.6;
+}
+.minutes__stale {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-size: 0.88rem;
+}
+.minutes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 24px;
+}
+.minutes__block--wide {
+  grid-column: 1 / -1;
+}
+.minutes__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 10px;
+  span {
+    padding: 1px 8px;
+    border-radius: 99px;
+    background: var(--raised);
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+}
+.minutes__note {
+  margin: 14px 0 0;
+  color: var(--faint);
+  font-size: 0.8rem;
 }
 
 .recbar {

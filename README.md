@@ -105,9 +105,22 @@ browser (React, existing CRA stack)               local server (server/, plain N
 6. **After the meeting ends**, every line is checked again against the final voiceprint of each
    speaker: unnamed speakers that are really one person are merged, and lines that clearly belong to
    someone else are moved. Lines you moved by hand and speakers you renamed are never changed.
-5. Corrections: click a speaker chip to rename it everywhere, use the merge icon when one person was
+7. Corrections: click a speaker chip to rename it everywhere, use the merge icon when one person was
    split in two (their future lines follow the merge), change a single line's speaker from its
    dropdown, double-click text to fix it. Export as text, Markdown or JSON.
+8. **Memory from meetings** (`server/meeting-notes.mjs`): once the speaker check is done, durable facts
+   from the transcript (plans, decisions, people, dates) go into long-term memory, linked to the meeting.
+   It follows the same rules as conversations (changes to existing memories wait for your OK). Turn it
+   off in Settings; the meeting page has "Add to memory" / "Check again" to run it by hand.
+9. **Minutes of meeting**: "Write minutes" on a finished meeting asks Gemini (the text model) for a
+   summary, key points, decisions, action items (owner and due date only when clear from the
+   transcript) and open questions. They are stored with the meeting, included in exports, and an
+   automatic "Meeting <date>" title is replaced by the topic. One request per click.
+10. **Asking about meetings**: the assistant knows today's date and has two tools, `find_meetings`
+    (date range and/or topic) and `get_meeting` (minutes, memories and transcript of one meeting). So
+    "what meetings did I have last Wednesday?" or "what did we decide about the budget on the 13th?"
+    work in voice and typed chat. Long transcripts are shortened (start and end kept) before being
+    sent to the model.
 
 Voice profiles (Meeting Mode → Voice profiles) require ticking a consent box and reading a short
 passage for at least 12 seconds. Record them with the microphone and room you use for meetings.
@@ -151,6 +164,9 @@ not model quality.
   requests/day on free keys. If answers that need the web fail or come back without sources, switch the
   Live model in Settings to `gemini-2.5-flash-native-audio-preview-12-2025` (Gemini 2.5 grounding quota).
 - Memory extraction depends on Gemini's judgment; review the Memory page and correct anything wrong.
+  Facts learned from meetings rely on speaker names from voice recognition, which can be wrong.
+- Minutes, memory-from-meetings and the meeting lookup tools were tested with a fake Gemini only; the
+  quality of real minutes and whether the Live model calls the meeting tools reliably are unverified.
 - Only one microphone user at a time: starting a meeting ends the current voice session.
 - Single local user, no accounts. The server listens on 127.0.0.1 only.
 
@@ -160,6 +176,7 @@ not model quality.
 server/            local API (node:http + node:sqlite), Gemini calls, local models
   index.mjs        routes          memory.mjs    extraction / conflicts / search
   meetings.mjs     diarization, transcription worker, export
+  meeting-notes.mjs  minutes, memory from meetings, date/topic lookup for the assistant
   models.mjs       transformers.js embeddings   gemini.mjs   tokens, JSON + transcription calls
 src/
   hooks/use-live-api.ts      Live session, transcripts, persistence, recall tool

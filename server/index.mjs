@@ -11,6 +11,7 @@ import { modelStatus, warmUp } from "./models.mjs";
 import * as conv from "./conversations.mjs";
 import * as mem from "./memory.mjs";
 import * as meet from "./meetings.mjs";
+import * as notes from "./meeting-notes.mjs";
 
 // ---- tiny router ---------------------------------------------------------------------
 const routes = [];
@@ -84,7 +85,7 @@ app.get("/api/live/setup", h((req) => {
     `You are AURA (Adaptive Unified Responsive Assistant), a warm, concise personal assistant.`,
     `Keep spoken answers short and natural unless the user asks for detail.`,
     s.userName ? `The user's name is ${s.userName}.` : ``,
-    `Today's date is ${new Date().toDateString()}.`,
+    `Right now it is ${notes.longDate(Date.now())} (time zone ${Intl.DateTimeFormat().resolvedOptions().timeZone}).`,
     ``,
     `You have a long-term memory that persists between conversations. It is updated automatically in the background from what the user tells you; you do not need to promise to save anything.`,
     memories.length
@@ -93,6 +94,9 @@ app.get("/api/live/setup", h((req) => {
     ``,
     `If the user asks about something personal that is not listed above, call the recall_memories tool before answering.`,
     `Never invent memories. If memories disagree, trust the most recently confirmed one and mention the change if relevant.`,
+    ``,
+    `The user records meetings with AURA's Meeting Mode. When they ask about a meeting (by date, a weekday like "last Wednesday", "yesterday", a topic or a person), call find_meetings with explicit dates you work out from the current date above, then call get_meeting for the one(s) that fit before answering questions about what was said, decided or assigned.`,
+    `Base meeting answers only on what those tools return. If no meeting matches, say so. Speaker names in transcripts come from voice recognition and can be wrong.`,
     ``,
     s.webSearch
       ? `You can search the web with Google Search. Use it for news, current events, prices, scores, weather, schedules and anything else that may have changed recently or that you are unsure about. Mention the source briefly when you use search results. Do not use web search for questions about the user; use memory for those.`
@@ -167,7 +171,19 @@ app.delete("/api/speakers/:id", h((req) => ({ deleted: meet.deleteProfile(id(req
 app.get("/api/meetings", h(() => meet.listMeetings()));
 app.post("/api/meetings", h((req) => meet.createMeeting(req.body?.title)));
 app.delete("/api/meetings", h(() => ({ deleted: meet.deleteAllMeetings() })));
+// before "/api/meetings/:id": date / topic lookup used by the assistant
+app.get("/api/meetings/find", h((req) => {
+  const num = (v) => (v == null || v === "" ? undefined : Number(v));
+  return notes.findMeetings({ from: num(req.query.from), to: num(req.query.to), q: req.query.q, limit: Math.min(20, Number(req.query.limit) || 10) });
+}));
 app.get("/api/meetings/:id", h((req) => meet.getMeeting(id(req)) || (() => { throw notFound(); })()));
+app.get("/api/meetings/:id/brief", h((req) => notes.meetingBrief(id(req)) || (() => { throw notFound(); })()));
+app.post("/api/meetings/:id/minutes", h((req) => notes.writeMinutes(id(req))));
+app.delete("/api/meetings/:id/minutes", h((req) => notes.deleteMinutes(id(req))));
+app.post("/api/meetings/:id/memorize", h(async (req) => {
+  await notes.memorizeMeeting(id(req));
+  return meet.getMeeting(id(req));
+}));
 app.patch("/api/meetings/:id", h((req) => meet.updateMeeting(id(req), req.body || {})));
 app.delete("/api/meetings/:id", h((req) => ({ deleted: meet.deleteMeeting(id(req)) })));
 app.post("/api/meetings/:id/segments", raw, h(async (req) => {

@@ -15,7 +15,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   other: "Other",
 };
 
-type Activity = { at: number; conversationId: number; applied: { op: string }[] };
+type Activity = { at: number; conversationId?: number; meetingId?: number; applied: { op: string }[] };
 
 export default function MemoryView({ onReviewed }: { onReviewed?: () => void }) {
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -230,7 +230,7 @@ function MemoryItem({
           <div className="memory-item__meta">
             <span className={cn("tag", `tag--${m.category}`)}>{CATEGORY_LABEL[m.category] || m.category}</span>
             <span title={dateTime(m.updatedAt)}>Updated {relativeTime(m.updatedAt)}</span>
-            <span>{m.source === "manual" ? "Added by you" : "Learned in conversation"}</span>
+            <span>{m.source === "manual" ? "Added by you" : m.source === "meeting" ? "Learned in a meeting" : "Learned in conversation"}</span>
             {m.score != null && <span>Match {(m.score * 100).toFixed(0)}%</span>}
             {m.status === "superseded" && <span className="memory-item__why">Replaced by: “{replacement?.content ?? "a newer memory"}”</span>}
             {m.status === "outdated" && <span className="memory-item__why">Marked no longer true</span>}

@@ -29,7 +29,7 @@ import { api, Memory, Message, WebSource } from "../lib/api";
 const recallDeclaration: FunctionDeclaration = {
   name: "recall_memories",
   description:
-    "Search AURA's long-term memory about the user (preferences, people, plans, personal facts) saved in earlier conversations.",
+    "Search AURA's long-term memory about the user (preferences, people, plans, personal facts) learned in earlier conversations and recorded meetings.",
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -38,6 +38,80 @@ const recallDeclaration: FunctionDeclaration = {
     required: ["query"],
   },
 };
+
+const findMeetingsDeclaration: FunctionDeclaration = {
+  name: "find_meetings",
+  description:
+    "List meetings the user recorded in Meeting Mode, newest first, with when they happened, who spoke and a short summary. " +
+    "Use explicit local dates worked out from the current date (e.g. 'last Wednesday' -> that date). Leave dates out to search all meetings.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      from_date: { type: Type.STRING, description: "First day to include, YYYY-MM-DD (local date)." },
+      to_date: { type: Type.STRING, description: "Last day to include, YYYY-MM-DD (local date). Same as from_date for a single day." },
+      query: { type: Type.STRING, description: "Optional topic, person or keyword to look for in titles, minutes and transcripts." },
+    },
+  },
+};
+
+const getMeetingDeclaration: FunctionDeclaration = {
+  name: "get_meeting",
+  description:
+    "Get one meeting in full: date, participants, minutes (summary, decisions, action items) if written, memories learned from it, and the transcript. " +
+    "Call it before answering questions about what was said or decided.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: { meeting_id: { type: Type.INTEGER, description: "id from find_meetings" } },
+    required: ["meeting_id"],
+  },
+};
+
+const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetingDeclaration];
+
+/** YYYY-MM-DD in the browser's time zone -> ms at the start of that day (or the end, with endOfDay). */
+function localDay(s: unknown, endOfDay = false): number | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? "").trim());
+  if (!m) return undefined;
+  const t = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + (endOfDay ? 1 : 0)).getTime();
+  return endOfDay ? t - 1 : t;
+}
+
+/** Run one of AURA's own tools for the Live model. */
+async function runTool(name: string | undefined, args: any, onRecall: (query: string, results: Memory[]) => void): Promise<Record<string, unknown>> {
+  if (name === "recall_memories") {
+    const query = String(args?.query || "");
+    const results = await api.get<Memory[]>(`/api/memories/search?q=${encodeURIComponent(query)}&k=6`);
+    onRecall(query, results);
+    return {
+      memories: results.map((r) => ({
+        fact: r.content,
+        lastConfirmed: new Date(r.updatedAt).toISOString().slice(0, 10),
+        ...(r.meetingId ? { fromMeetingId: r.meetingId } : {}),
+      })),
+    };
+  }
+  if (name === "find_meetings") {
+    const from = localDay(args?.from_date);
+    const to = localDay(args?.to_date || args?.from_date, true);
+    const q = new URLSearchParams();
+    if (from != null) q.set("from", String(from));
+    if (to != null) q.set("to", String(to));
+    if (args?.query) q.set("q", String(args.query));
+    const r = await api.get<{ matchedQuery: boolean; meetings: unknown[] }>(`/api/meetings/find?${q}`);
+    return {
+      ...r,
+      note: r.meetings.length
+        ? args?.query && !r.matchedQuery
+          ? "No meeting mentions that topic; these are all meetings in the date range."
+          : undefined
+        : "No meetings were recorded in that period.",
+    };
+  }
+  if (name === "get_meeting") {
+    return api.get<Record<string, unknown>>(`/api/meetings/${Number(args?.meeting_id)}/brief`);
+  }
+  return { error: "unknown function" };
+}
 
 export type UseLiveAPIResults = {
   status: LiveStatus;
@@ -271,23 +345,9 @@ export function useLiveAPI(): UseLiveAPIResults {
     const onToolCall = async (tc: LiveServerToolCall) => {
       const responses = await Promise.all(
         (tc.functionCalls || []).map(async (fc) => {
-          if (fc.name !== "recall_memories") {
-            return { id: fc.id, name: fc.name, response: { error: "unknown function" } };
-          }
-          const query = String((fc.args as any)?.query || "");
           try {
-            const results = await api.get<Memory[]>(`/api/memories/search?q=${encodeURIComponent(query)}&k=6`);
-            setLastRecall({ query, results });
-            return {
-              id: fc.id,
-              name: fc.name,
-              response: {
-                memories: results.map((r) => ({
-                  fact: r.content,
-                  lastConfirmed: new Date(r.updatedAt).toISOString().slice(0, 10),
-                })),
-              },
-            };
+            const response = await runTool(fc.name, fc.args, (query, results) => setLastRecall({ query, results }));
+            return { id: fc.id, name: fc.name, response };
           } catch (e: any) {
             return { id: fc.id, name: fc.name, response: { error: e.message } };
           }
@@ -365,8 +425,8 @@ export function useLiveAPI(): UseLiveAPIResults {
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: useSearch
-            ? [{ googleSearch: {} }, { functionDeclarations: [recallDeclaration] }]
-            : [{ functionDeclarations: [recallDeclaration] }],
+            ? [{ googleSearch: {} }, { functionDeclarations: TOOL_DECLARATIONS }]
+            : [{ functionDeclarations: TOOL_DECLARATIONS }],
           sessionResumption: handle ? { handle } : {},
           contextWindowCompression: { slidingWindow: {} },
         };
