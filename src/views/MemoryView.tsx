@@ -3,6 +3,7 @@ import cn from "classnames";
 import { api, Memory } from "../lib/api";
 import { relativeTime, dateTime } from "../lib/format";
 import ConfirmButton from "../components/ConfirmButton";
+import MemoryReview from "../components/MemoryReview";
 
 const CATEGORIES = ["preference", "personal", "people", "work", "plan", "other"];
 const CATEGORY_LABEL: Record<string, string> = {
@@ -16,7 +17,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 type Activity = { at: number; conversationId: number; applied: { op: string }[] };
 
-export default function MemoryView() {
+export default function MemoryView({ onReviewed }: { onReviewed?: () => void }) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [tab, setTab] = useState<"active" | "history">("active");
   const [query, setQuery] = useState("");
@@ -102,6 +103,14 @@ export default function MemoryView() {
           onError={setError}
         />
       )}
+
+      <MemoryReview
+        signal={memories}
+        onChanged={() => {
+          load();
+          onReviewed?.();
+        }}
+      />
 
       <div className="memory__toolbar">
         <div className="segmented" role="tablist">

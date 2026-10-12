@@ -60,6 +60,20 @@ CREATE TABLE IF NOT EXISTS memories (
   updated_at INTEGER NOT NULL
 );
 
+-- changes to existing memories that wait for the user's OK
+-- action: update | retire | forget; status: pending | accepted | rejected
+CREATE TABLE IF NOT EXISTS memory_proposals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+  content TEXT,
+  category TEXT,
+  conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS speaker_profiles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -105,6 +119,18 @@ CREATE TABLE IF NOT EXISTS segments (
 );
 `);
 
+// columns added after the first release
+function addColumn(table, column, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`);
+}
+addColumn("messages", "meta", "TEXT"); // JSON: web sources used for an answer
+addColumn("conversations", "pinned", "INTEGER NOT NULL DEFAULT 0");
+addColumn("speaker_profiles", "model", "TEXT"); // speaker model that produced the voiceprint
+addColumn("segments", "embedding", "BLOB"); // voice embedding, used to refine speakers after a meeting
+addColumn("segments", "manual", "INTEGER NOT NULL DEFAULT 0"); // speaker set by the user, never changed automatically
+addColumn("meetings", "refined", "INTEGER NOT NULL DEFAULT 0"); // speakers re-checked after the meeting ended
+
 export const now = () => Date.now();
 
 export function f32ToBlob(arr) {
@@ -128,16 +154,26 @@ export const DEFAULT_SETTINGS = {
   voice: "Kore",
   userName: "",
   autoMemory: true,
-  // cosine similarity needed to attach a registered name to a voice
-  speakerMatchThreshold: 0.86,
-  // cosine similarity needed to treat a segment as an already-seen unknown voice
-  speakerClusterThreshold: 0.8,
+  // let the assistant use Google Search for current information
+  webSearch: true,
+  // ask before an existing memory is changed, marked outdated or deleted
+  confirmMemoryChanges: true,
+  // cosine similarity (WeSpeaker embeddings) needed to attach a registered name to a voice
+  voiceMatchThreshold: 0.5,
+  // cosine similarity needed to treat a piece of speech as an already-heard voice
+  voiceClusterThreshold: 0.45,
+  // optional hint for meeting transcription, e.g. "English and Hindi"
+  meetingLanguage: "",
+  // "live": Gemini 3.5 Transcribe Live (streaming, no daily request cap on the free tier)
+  // "standard": batched requests to GEMINI_TRANSCRIBE_MODEL
+  meetingTranscriber: "live",
 };
 
 export function getSettings() {
   const rows = db.prepare("SELECT key, value FROM settings").all();
   const s = { ...DEFAULT_SETTINGS };
   for (const r of rows) {
+    if (!(r.key in DEFAULT_SETTINGS)) continue; // keys from older versions
     try {
       s[r.key] = JSON.parse(r.value);
     } catch {}

@@ -92,46 +92,49 @@ export async function generateJSON({ system, prompt, schema, model = TEXT_MODEL,
 }
 
 /**
- * Transcribe several short PCM16 (16 kHz mono) segments in one request.
- * Returns an array of strings in the same order ("" when no intelligible speech).
+ * Transcribe several short PCM16 (16 kHz mono) clips in one request.
+ * `context` is the most recent transcript (plain text) to help with names and terms.
+ * Returns { texts, raw }: one string per clip, in order ("" when no intelligible speech).
  */
-export async function transcribeSegments(pcmBuffers) {
+export async function transcribeSegments(pcmBuffers, { context = "", language = "" } = {}) {
+  const n = pcmBuffers.length;
   const parts = [];
+  if (context) {
+    parts.push({ text: `Transcript so far (for context only, do not repeat it):\n${context}` });
+  }
   pcmBuffers.forEach((pcm, i) => {
-    parts.push({ text: `Segment ${i + 1}:` });
-    parts.push({
-      inlineData: { mimeType: "audio/wav", data: pcmToWav(pcm).toString("base64") },
-    });
+    parts.push({ text: `Clip ${i + 1} of ${n}:` });
+    parts.push({ inlineData: { mimeType: "audio/wav", data: pcmToWav(pcm).toString("base64") } });
   });
   parts.push({
     text:
-      `Transcribe each of the ${pcmBuffers.length} audio segments above verbatim, in the language spoken. ` +
-      `Return one entry per segment, in order. Use an empty string for a segment with no intelligible speech. ` +
-      `Do not add speaker names, timestamps, translations or commentary.`,
+      `Transcribe each of the ${n} audio clips above, word for word. ` +
+      `Return "transcripts" as an array of exactly ${n} strings: the first string is clip 1, the second is clip 2, and so on. ` +
+      (language
+        ? `The speakers mostly use: ${language}. `
+        : `Write each clip in the language it is spoken in. `) +
+      `If speakers mix languages (for example Hindi and English), keep the words as spoken; do not translate. ` +
+      `Use normal punctuation. Leave out filler sounds like "um". ` +
+      `Use an empty string only when a clip has no intelligible speech at all. ` +
+      `Do not add speaker names, timestamps, descriptions or comments.`,
   });
   const out = await generateJSON({
     model: TRANSCRIBE_MODEL,
-    system: "You are a precise speech-to-text transcriber.",
+    system: "You are an accurate meeting transcriber. You only write down what is said in the audio.",
     parts,
     schema: {
       type: "object",
       properties: {
-        segments: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: { index: { type: "integer" }, text: { type: "string" } },
-            required: ["index", "text"],
-          },
-        },
+        transcripts: { type: "array", items: { type: "string" }, minItems: n, maxItems: n },
       },
-      required: ["segments"],
+      required: ["transcripts"],
     },
   });
-  const result = new Array(pcmBuffers.length).fill("");
-  for (const s of out.segments || []) {
-    const i = Number(s.index) - 1;
-    if (i >= 0 && i < result.length) result[i] = String(s.text || "").trim();
+  const list = Array.isArray(out?.transcripts) ? out.transcripts : Array.isArray(out) ? out : [];
+  const texts = new Array(n).fill("");
+  for (let i = 0; i < n && i < list.length; i++) {
+    const v = list[i];
+    texts[i] = String(typeof v === "string" ? v : v?.text ?? "").trim();
   }
-  return result;
+  return { texts, raw: out, count: list.length };
 }

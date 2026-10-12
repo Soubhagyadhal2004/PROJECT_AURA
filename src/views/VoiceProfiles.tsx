@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import cn from "classnames";
 import { api, SpeakerProfile } from "../lib/api";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { dateTime } from "../lib/format";
@@ -62,12 +63,14 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"enroll" | "test" | null>(null);
   const [testResult, setTestResult] = useState<{ name: string; score: number }[] | null>(null);
-  const [threshold, setThreshold] = useState(0.86);
+  const [threshold, setThreshold] = useState(0.5);
+  // re-recording an existing profile (e.g. after a speaker-model upgrade)
+  const [replace, setReplace] = useState<SpeakerProfile | null>(null);
   const cap = usePcmCapture(onError);
 
   const load = useCallback(() => {
     api.get<SpeakerProfile[]>("/api/speakers").then(setProfiles).catch((e) => onError(e.message));
-    api.get<{ speakerMatchThreshold: number }>("/api/settings").then((s) => setThreshold(s.speakerMatchThreshold)).catch(() => {});
+    api.get<{ voiceMatchThreshold: number }>("/api/settings").then((s) => setThreshold(s.voiceMatchThreshold)).catch(() => {});
   }, [onError]);
   useEffect(load, [load]);
 
@@ -85,9 +88,11 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
     }
     setBusy(true);
     try {
-      await api.postAudio(`/api/speakers?name=${encodeURIComponent(name.trim())}&consent=yes`, pcm);
+      const q = `name=${encodeURIComponent(name.trim())}&consent=yes${replace ? `&replace=${replace.id}` : ""}`;
+      await api.postAudio(`/api/speakers?${q}`, pcm);
       setName("");
       setConsent(false);
+      setReplace(null);
       load();
     } catch (e: any) {
       onError(e.message);
@@ -119,7 +124,7 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
   return (
     <div className="voices">
       <div className="voices__enroll card">
-        <h2>Add a voice profile</h2>
+        <h2>{replace ? `Re-record ${replace.name}'s voice` : "Add a voice profile"}</h2>
         <p className="muted">
           A profile lets Meeting Mode show a person's name instead of “Speaker 2”. Only a numeric voiceprint is kept on this computer, not the recording.
         </p>
@@ -127,6 +132,7 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
           <span>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya" disabled={!!mode} />
         </label>
+        <p className="muted small">Record in the room and on the microphone you'll use for meetings, at your normal distance.</p>
         <label className="check">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} disabled={!!mode} />
           <span>{name.trim() || "This person"} knows their voice is being recorded and agrees to a voice profile being stored here.</span>
@@ -150,7 +156,7 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
               <button className="btn btn--primary" onClick={finishEnroll} disabled={cap.seconds < MIN_SECONDS}>
                 Save profile
               </button>
-              <button className="btn btn--ghost" onClick={() => { cap.stop(); setMode(null); }}>
+              <button className="btn btn--ghost" onClick={() => { cap.stop(); setMode(null); setReplace(null); }}>
                 Cancel
               </button>
             </div>
@@ -161,13 +167,18 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
             {busy ? "Saving…" : "Record voice sample"}
           </button>
         )}
+        {replace && !mode && (
+          <button className="link-button" onClick={() => { setReplace(null); setName(""); }}>
+            Cancel re-recording
+          </button>
+        )}
         {disabled && <p className="muted">Stop the meeting recording to add profiles.</p>}
       </div>
 
       <div className="voices__list card">
         <div className="voices__list-head">
           <h2>Saved profiles</h2>
-          {profiles.length > 0 &&
+          {profiles.some((p) => !p.outdated) &&
             (mode === "test" ? (
               <button className="btn btn--primary btn--small" onClick={finishTest}>
                 Check now ({Math.floor(cap.seconds)} s)
@@ -183,32 +194,60 @@ export default function VoiceProfiles({ disabled, onError }: { disabled: boolean
         {testResult && (
           <div className="test-result">
             {testResult.length === 0 ? (
-              <p>No profiles to compare with.</p>
+              <p>No up-to-date profiles to compare with.</p>
             ) : testResult[0].score >= threshold ? (
               <p>
-                Recognised as <strong>{testResult[0].name}</strong> (similarity {testResult[0].score.toFixed(2)}, needs {threshold.toFixed(2)}).
+                Recognised as <strong>{testResult[0].name}</strong>.
               </p>
             ) : (
-              <p>
-                Not confident enough to name this voice. Closest is {testResult[0].name} at {testResult[0].score.toFixed(2)}; a name is shown from{" "}
-                {threshold.toFixed(2)}.
-              </p>
+              <p>Not confident enough to name this voice.</p>
             )}
+            {testResult.length > 0 && (
+              <ul className="test-scores">
+                {testResult.map((r) => (
+                  <li key={r.name}>
+                    <span>{r.name}</span>
+                    <span className="test-scores__bar" aria-hidden="true">
+                      <span style={{ width: `${Math.max(0, Math.min(1, r.score)) * 100}%` }} />
+                      <i style={{ left: `${threshold * 100}%` }} />
+                    </span>
+                    <span className="test-scores__n">{r.score.toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="muted small">
+              A name is shown from {threshold.toFixed(2)} (the line), and only when the best match is clearly ahead of the next one.
+            </p>
           </div>
         )}
         <ul>
           {profiles.length === 0 && <li className="empty">No voice profiles yet. Everyone will appear as Speaker 1, Speaker 2…</li>}
           {profiles.map((p) => (
-            <li key={p.id} className="profile">
+            <li key={p.id} className={cn("profile", { "profile--outdated": p.outdated })}>
               <span className="profile__avatar" aria-hidden="true">
                 {p.name.slice(0, 1).toUpperCase()}
               </span>
               <div>
                 <strong>{p.name}</strong>
                 <span className="muted">
-                  {Math.round(p.sampleSeconds)} s sample, added {dateTime(p.createdAt)}
+                  {p.outdated ? "Recorded with the previous voice model, not used until re-recorded" : `${Math.round(p.sampleSeconds)} s sample, added ${dateTime(p.createdAt)}`}
                 </span>
               </div>
+              {p.outdated && (
+                <button
+                  className="btn btn--small"
+                  disabled={disabled || busy || !!mode}
+                  onClick={() => {
+                    setReplace(p);
+                    setName(p.name);
+                    setConsent(false);
+                    setTestResult(null);
+                  }}
+                >
+                  Re-record
+                </button>
+              )}
               <ConfirmButton
                 small
                 iconOnly

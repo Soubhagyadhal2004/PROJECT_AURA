@@ -4,17 +4,38 @@ import { useLiveAPIContext } from "../contexts/LiveAPIContext";
 import { api, Conversation, Message } from "../lib/api";
 import { dateTime } from "../lib/format";
 import Orb from "../components/Orb";
-import ConfirmButton from "../components/ConfirmButton";
+import MemoryReview from "../components/MemoryReview";
+import { ConversationActions, ConversationTitle } from "../components/ConversationActions";
 
 type Props = {
   historyId: number | null;
   onCloseHistory: () => void;
   onHistoryChanged: () => void;
+  historyVersion: number;
+  memoryReviews: number;
 };
 
-export default function AssistantView({ historyId, onCloseHistory, onHistoryChanged }: Props) {
-  if (historyId) return <PastConversation id={historyId} onClose={onCloseHistory} onDeleted={onHistoryChanged} />;
-  return <LiveConversation />;
+export default function AssistantView({ historyId, onCloseHistory, onHistoryChanged, historyVersion, memoryReviews }: Props) {
+  if (historyId)
+    return <PastConversation id={historyId} onClose={onCloseHistory} onChanged={onHistoryChanged} version={historyVersion} />;
+  return <LiveConversation onChanged={onHistoryChanged} version={historyVersion} memoryReviews={memoryReviews} />;
+}
+
+/** Name and pin state of a saved conversation (refreshed when the list changes). */
+function useConversationMeta(id: number | null, version: number, extra: unknown = null) {
+  const [meta, setMeta] = useState<Conversation | null>(null);
+  useEffect(() => {
+    if (!id) return setMeta(null);
+    let stop = false;
+    api
+      .get<Conversation>(`/api/conversations/${id}`)
+      .then((c) => !stop && setMeta(c))
+      .catch(() => {});
+    return () => {
+      stop = true;
+    };
+  }, [id, version, extra]);
+  return meta;
 }
 
 function MessageList({ messages, live }: { messages: Message[]; live?: boolean }) {
@@ -27,6 +48,7 @@ function MessageList({ messages, live }: { messages: Message[]; live?: boolean }
       {messages.map((m, i) => (
         <div key={m.id ?? `${i}-${m.createdAt}`} className={cn("msg", `msg--${m.role}`, { "msg--pending": m.pending })}>
           <div className="msg__bubble">{m.text}</div>
+          {m.role === "assistant" && (m.sources?.length || m.searchQueries?.length) ? <WebSources m={m} /> : null}
           <div className="msg__meta">
             {m.role === "user" ? "You" : "AURA"}
             {m.modality === "voice" && (
@@ -43,9 +65,58 @@ function MessageList({ messages, live }: { messages: Message[]; live?: boolean }
   );
 }
 
-function LiveConversation() {
+const host = (uri: string) => {
+  try {
+    return new URL(uri).hostname.replace(/^www\./, "");
+  } catch {
+    return uri;
+  }
+};
+
+function WebSources({ m }: { m: Message }) {
+  const sources = m.sources || [];
+  return (
+    <div className="web-sources">
+      <div className="web-sources__head">
+        <span className="material-symbols-outlined">travel_explore</span>
+        {m.searchQueries?.length ? (
+          <span>
+            Searched the web for <q>{m.searchQueries.join("”, “")}</q>
+          </span>
+        ) : (
+          <span>From the web</span>
+        )}
+      </div>
+      {sources.length > 0 && (
+        <ol className="web-sources__list">
+          {sources.map((s, i) => (
+            <li key={s.uri}>
+              <a href={s.uri} target="_blank" rel="noreferrer noopener" title={s.uri}>
+                <span className="web-sources__n">{i + 1}</span>
+                {/* grounding links are Google redirects, so the title is usually the site name */}
+                {s.title && s.title !== s.uri ? s.title : host(s.uri)}
+              </a>
+            </li>
+          ))}
+        </ol>
+      )}
+      {m.searchWidget && (
+        <iframe
+          className="web-sources__suggest"
+          title="Google Search suggestions"
+          sandbox="allow-popups allow-popups-to-escape-sandbox"
+          srcDoc={`<base target="_blank">${m.searchWidget}`}
+        />
+      )}
+    </div>
+  );
+}
+
+function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: () => void; version: number; memoryReviews: number }) {
   const live = useLiveAPIContext();
   const { status, error, micOn, micVolume, outVolume, messages } = live;
+  const firstUserText = messages.find((m) => m.role === "user" && !m.pending)?.text;
+  const meta = useConversationMeta(live.conversationId, version, firstUserText);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -88,18 +159,30 @@ function LiveConversation() {
   return (
     <section className="view assistant">
       <header className="view__header">
-        <div>
-          <h1>Assistant</h1>
+        <div className="view__title">
+          {meta ? <ConversationTitle conv={meta} onChanged={onChanged} /> : <h1>Assistant</h1>}
           <p className="view__sub">
             {live.memoryCount != null && connected
               ? `Talking with ${live.memoryCount} remembered ${live.memoryCount === 1 ? "fact" : "facts"} in context`
               : "Talk or type. AURA remembers what matters between sessions."}
           </p>
         </div>
-        <button className="btn btn--ghost" onClick={live.newConversation} disabled={!messages.length && !connected}>
-          <span className="material-symbols-outlined">add_comment</span>
-          New conversation
-        </button>
+        <div className="view__actions">
+          {meta && (
+            <ConversationActions
+              conv={meta}
+              onChanged={onChanged}
+              onDeleted={() => {
+                live.newConversation();
+                onChanged();
+              }}
+            />
+          )}
+          <button className="btn btn--ghost" onClick={live.newConversation} disabled={!messages.length && !connected}>
+            <span className="material-symbols-outlined">add_comment</span>
+            New conversation
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -146,6 +229,8 @@ function LiveConversation() {
           </div>
         )}
       </div>
+
+      <MemoryReview compact signal={memoryReviews} />
 
       <footer className="composer">
         <div className="composer__voice">
@@ -195,36 +280,47 @@ function LiveConversation() {
   );
 }
 
-function PastConversation({ id, onClose, onDeleted }: { id: number; onClose: () => void; onDeleted: () => void }) {
-  const [conv, setConv] = useState<Conversation | null>(null);
+function PastConversation({ id, onClose, onChanged, version }: { id: number; onClose: () => void; onChanged: () => void; version: number }) {
+  const live = useLiveAPIContext();
   const [error, setError] = useState<string | null>(null);
+  const conv = useConversationMeta(id, version);
 
-  useEffect(() => {
-    setConv(null);
-    api
-      .get<Conversation>(`/api/conversations/${id}`)
-      .then(setConv)
-      .catch((e) => setError(e.message));
-  }, [id]);
-
-  const remove = async () => {
-    await api.del(`/api/conversations/${id}`);
-    onDeleted();
-    onClose();
+  const resume = async () => {
+    try {
+      await live.continueConversation(id);
+      onClose();
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   return (
     <section className="view assistant">
       <header className="view__header">
-        <div>
+        <div className="view__title">
           <button className="link-button" onClick={onClose}>
             <span className="material-symbols-outlined">arrow_back</span>
             Current conversation
           </button>
-          <h1>{conv?.messages.find((m) => m.role === "user")?.text.slice(0, 60) || "Conversation"}</h1>
-          {conv && <p className="view__sub">Read-only, from {dateTime(conv.startedAt)}</p>}
+          {conv ? <ConversationTitle conv={conv} onChanged={onChanged} /> : <h1>Conversation</h1>}
+          {conv && <p className="view__sub">From {dateTime(conv.startedAt)}</p>}
         </div>
-        <ConfirmButton onConfirm={remove} label="Delete conversation" confirmLabel="Delete for good" />
+        <div className="view__actions">
+          {conv && (
+            <ConversationActions
+              conv={conv}
+              onChanged={onChanged}
+              onDeleted={() => {
+                onChanged();
+                onClose();
+              }}
+            />
+          )}
+          <button className="btn btn--primary" onClick={resume} disabled={!conv}>
+            <span className="material-symbols-outlined">play_arrow</span>
+            Continue this conversation
+          </button>
+        </div>
       </header>
       {error && <div className="banner banner--error">{error}</div>}
       <div className="assistant__body">{conv && <MessageList messages={conv.messages} />}</div>

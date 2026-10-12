@@ -18,7 +18,7 @@ export class Segmenter {
 
   constructor(
     private onSegment: (s: SpeechSegment) => void,
-    private opts = { pauseMs: 700, maxMs: 15000, minVoicedMs: 400, preRollMs: 300 }
+    private opts = { pauseMs: 700, maxMs: 10000, minVoicedMs: 400, preRollMs: 300 }
   ) {}
 
   push(buf: ArrayBuffer) {

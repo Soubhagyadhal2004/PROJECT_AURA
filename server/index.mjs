@@ -50,6 +50,14 @@ const h = (fn) => fn;
 const id = (req, name = "id") => Number(req.params[name]);
 const notFound = () => Object.assign(new Error("Not found"), { status: 404 });
 const bad = (msg) => Object.assign(new Error(msg), { status: 400 });
+function sendDownload(res, { mime, ext, body, title }) {
+  const safe = String(title || "export").replace(/[^\p{L}\p{N}\- ]+/gu, "").trim().replace(/\s+/g, "_").slice(0, 80) || "export";
+  res.writeHead(200, {
+    "Content-Type": `${mime}; charset=utf-8`,
+    "Content-Disposition": `attachment; filename="${safe.replace(/[^\x20-\x7e]/g, "_")}.${ext}"; filename*=UTF-8''${encodeURIComponent(safe)}.${ext}`,
+  });
+  res.end(body);
+}
 
 // ---- status / settings ---------------------------------------------------------------
 app.get("/api/health", h(() => ({
@@ -58,6 +66,7 @@ app.get("/api/health", h(() => ({
   models: modelStatus,
   geminiModels: { text: TEXT_MODEL, transcribe: TRANSCRIBE_MODEL },
   meetingWorker: meet.workerState,
+  memoryReviews: mem.pendingProposalCount(),
   dataDir: DATA_DIR,
 })));
 app.get("/api/settings", h(() => getSettings()));
@@ -66,7 +75,7 @@ app.put("/api/settings", h((req) => saveSettings(req.body || {})));
 // ---- Gemini Live -------------------------------------------------------------------------
 app.post("/api/live/token", h(() => createLiveToken()));
 
-app.get("/api/live/setup", h(() => {
+app.get("/api/live/setup", h((req) => {
   const s = getSettings();
   const memories = mem.coreMemories(30);
   const day = (t) => new Date(t).toISOString().slice(0, 10);
@@ -84,8 +93,17 @@ app.get("/api/live/setup", h(() => {
     ``,
     `If the user asks about something personal that is not listed above, call the recall_memories tool before answering.`,
     `Never invent memories. If memories disagree, trust the most recently confirmed one and mention the change if relevant.`,
+    ``,
+    s.webSearch
+      ? `You can search the web with Google Search. Use it for news, current events, prices, scores, weather, schedules and anything else that may have changed recently or that you are unsure about. Mention the source briefly when you use search results. Do not use web search for questions about the user; use memory for those.`
+      : `You cannot browse the web in this session. If the user asks about recent news or live information, say that web search is turned off in Settings.`,
   ].filter((l) => l !== null).join("\n");
-  return { model: s.liveModel, voice: s.voice, systemInstruction, memoryCount: memories.length };
+  const convId = Number(req.query.conversation) || null;
+  const earlier = convId ? conv.historyForPrompt(convId) : "";
+  const full = earlier
+    ? `${systemInstruction}\n\nThe user is continuing an earlier conversation. What was said before (oldest first):\n${earlier}\n\nPick up naturally from there; don't repeat or summarise it unless asked.`
+    : systemInstruction;
+  return { model: s.liveModel, voice: s.voice, systemInstruction: full, memoryCount: memories.length, webSearch: !!s.webSearch };
 }));
 
 // ---- conversations ----------------------------------------------------------------------
@@ -93,10 +111,11 @@ app.get("/api/conversations", h(() => conv.listConversations()));
 app.post("/api/conversations", h(() => conv.createConversation()));
 app.get("/api/conversations/:id", h((req) => conv.getConversation(id(req)) || (() => { throw notFound(); })()));
 app.post("/api/conversations/:id/messages", h((req) => {
-  const { role, text, modality } = req.body || {};
+  const { role, text, modality, sources, searchQueries } = req.body || {};
   if (!["user", "assistant"].includes(role) || !String(text || "").trim()) throw bad("role and text required");
   if (!conv.getConversation(id(req))) throw notFound();
-  const m = conv.addMessage(id(req), { role, text: String(text).trim(), modality });
+  const meta = role === "assistant" ? conv.cleanSearchMeta({ sources, searchQueries }) : null;
+  const m = conv.addMessage(id(req), { role, text: String(text).trim(), modality, meta });
   if (role === "assistant") mem.scheduleExtraction(id(req));
   return m;
 }));
@@ -104,6 +123,12 @@ app.post("/api/conversations/:id/end", h((req) => {
   mem.scheduleExtraction(id(req), 0);
   return { ok: true };
 }));
+app.patch("/api/conversations/:id", h((req) => conv.updateConversation(id(req), req.body || {}) || (() => { throw notFound(); })()));
+app.get("/api/conversations/:id/export", (req, res) => {
+  const out = conv.exportConversation(id(req), String(req.query.format || "md"));
+  if (!out) throw notFound();
+  sendDownload(res, out);
+});
 app.delete("/api/conversations/:id", h((req) => ({ deleted: conv.deleteConversation(id(req)) })));
 app.delete("/api/conversations", h(() => ({ deleted: conv.deleteAllConversations() })));
 
@@ -111,6 +136,9 @@ app.delete("/api/conversations", h(() => ({ deleted: conv.deleteAllConversations
 app.get("/api/memories", h(() => mem.listMemories()));
 app.get("/api/memories/search", h((req) => mem.searchMemories(String(req.query.q || ""), Number(req.query.k) || 6)));
 app.get("/api/memories/activity", h(() => mem.extractionLog));
+app.get("/api/memories/proposals", h(() => mem.listProposals()));
+app.post("/api/memories/proposals/:id/accept", h(async (req) => (await mem.acceptProposal(id(req), req.body || {})) || (() => { throw notFound(); })()));
+app.post("/api/memories/proposals/:id/reject", h((req) => ({ ok: mem.rejectProposal(id(req)) })));
 app.post("/api/memories", h((req) => {
   const { content, category } = req.body || {};
   if (!String(content || "").trim()) throw bad("content required");
@@ -128,7 +156,8 @@ app.post("/api/speakers", raw, h((req) => {
   const consent = String(req.query.consent || "");
   if (!name) throw bad("name required");
   if (consent !== "yes") throw bad("The speaker must agree to voice enrollment.");
-  return meet.enrollProfile({ name, pcm: req.body, consentNote: `Consent confirmed in AURA on ${new Date().toISOString()}` });
+  const replaceId = Number(req.query.replace) || null; // re-recording an existing profile
+  return meet.enrollProfile({ name, pcm: req.body, replaceId, consentNote: `Consent confirmed in AURA on ${new Date().toISOString()}` });
 }));
 app.post("/api/speakers/identify", raw, h((req) => meet.identify(req.body)));
 app.patch("/api/speakers/:id", h((req) => meet.renameProfile(id(req), String(req.body?.name || ""))));
@@ -141,10 +170,16 @@ app.delete("/api/meetings", h(() => ({ deleted: meet.deleteAllMeetings() })));
 app.get("/api/meetings/:id", h((req) => meet.getMeeting(id(req)) || (() => { throw notFound(); })()));
 app.patch("/api/meetings/:id", h((req) => meet.updateMeeting(id(req), req.body || {})));
 app.delete("/api/meetings/:id", h((req) => ({ deleted: meet.deleteMeeting(id(req)) })));
-app.post("/api/meetings/:id/segments", raw, h((req) => {
+app.post("/api/meetings/:id/segments", raw, h(async (req) => {
   if (!meet.getMeeting(id(req))) throw notFound();
   if (!req.body?.length) throw bad("audio body required");
-  return { id: meet.addSegment(id(req), { startMs: Number(req.query.start) || 0, endMs: Number(req.query.end) || 0, pcm: req.body }) };
+  const piece = { startMs: Number(req.query.start) || 0, endMs: Number(req.query.end) || 0, pcm: req.body };
+  if (req.query.live === "1") return { turns: await meet.addSegmentLive(id(req), piece) };
+  return { id: meet.addSegment(id(req), piece) };
+}));
+app.post("/api/meetings/:id/segments/:segId/transcript", h((req) => {
+  const { text, failed } = req.body || {};
+  return { ok: meet.setLiveTranscript(id(req), id(req, "segId"), { text, failed: !!failed }) };
 }));
 app.post("/api/meetings/:id/retry", h((req) => ({ requeued: meet.retryFailed(id(req)) })));
 app.patch("/api/meetings/:id/speakers/:sid", h((req) => meet.renameSpeaker(id(req), id(req, "sid"), String(req.body?.label || ""))));
@@ -158,12 +193,7 @@ app.patch("/api/meetings/:id/segments/:segId", h((req) => {
 app.get("/api/meetings/:id/export", (req, res) => {
   const out = meet.exportMeeting(id(req), String(req.query.format || "txt"));
   if (!out) throw notFound();
-  const safe = (meet.getMeeting(id(req)).title || "meeting").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "meeting";
-  res.writeHead(200, {
-    "Content-Type": `${out.mime}; charset=utf-8`,
-    "Content-Disposition": `attachment; filename="${safe}.${out.ext}"`,
-  });
-  res.end(out.body);
+  sendDownload(res, { ...out, title: meet.getMeeting(id(req)).title || "meeting" });
 });
 
 // ---- wipe everything -----------------------------------------------------------------------------

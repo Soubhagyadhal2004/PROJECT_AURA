@@ -18,13 +18,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FunctionDeclaration, LiveConnectConfig, LiveServerToolCall, Modality, Part, Type } from "@google/genai";
+import { FunctionDeclaration, GroundingMetadata, LiveConnectConfig, LiveServerToolCall, Modality, Part, Type } from "@google/genai";
 import { GenAILiveClient, LiveStatus } from "../lib/genai-live-client";
 import { AudioStreamer } from "../lib/audio-streamer";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { audioContext } from "../lib/utils";
 import VolMeterWorket from "../lib/worklets/vol-meter";
-import { api, Memory, Message } from "../lib/api";
+import { api, Memory, Message, WebSource } from "../lib/api";
 
 const recallDeclaration: FunctionDeclaration = {
   name: "recall_memories",
@@ -54,11 +54,26 @@ export type UseLiveAPIResults = {
   conversationId: number | null;
   sendText: (text: string) => Promise<void>;
   newConversation: () => void;
+  /** load a saved conversation and keep talking in it */
+  continueConversation: (id: number) => Promise<void>;
   memoryCount: number | null;
   lastRecall: { query: string; results: Memory[] } | null;
 };
 
-type SetupResponse = { model: string; voice: string; systemInstruction: string; memoryCount: number };
+type SetupResponse = { model: string; voice: string; systemInstruction: string; memoryCount: number; webSearch: boolean };
+
+type TurnSearch = { sources: WebSource[]; searchQueries: string[]; searchWidget?: string };
+
+function mergeSearch(prev: TurnSearch | null, g: GroundingMetadata): TurnSearch {
+  const out: TurnSearch = prev ? { ...prev, sources: prev.sources.slice(), searchQueries: prev.searchQueries.slice() } : { sources: [], searchQueries: [] };
+  for (const c of g.groundingChunks || []) {
+    const uri = c.web?.uri;
+    if (uri && !out.sources.some((s) => s.uri === uri)) out.sources.push({ title: c.web?.title || c.web?.domain || uri, uri });
+  }
+  for (const q of g.webSearchQueries || []) if (q && !out.searchQueries.includes(q)) out.searchQueries.push(q);
+  if (g.searchEntryPoint?.renderedContent) out.searchWidget = g.searchEntryPoint.renderedContent;
+  return out;
+}
 
 export function useLiveAPI(): UseLiveAPIResults {
   const client = useMemo(() => new GenAILiveClient(), []);
@@ -81,6 +96,8 @@ export function useLiveAPI(): UseLiveAPIResults {
   const pendingUser = useRef<Message | null>(null);
   const pendingAssistant = useRef<Message | null>(null);
   const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  // web search results for the assistant turn in progress
+  const turnSearch = useRef<TurnSearch | null>(null);
 
   // ---- audio out -------------------------------------------------------------------------
   useEffect(() => {
@@ -107,7 +124,13 @@ export function useLiveAPI(): UseLiveAPIResults {
       saveChain.current = saveChain.current
         .then(async () => {
           const id = await ensureConversation();
-          await api.post(`/api/conversations/${id}/messages`, { role: m.role, text: m.text, modality: m.modality });
+          await api.post(`/api/conversations/${id}/messages`, {
+            role: m.role,
+            text: m.text,
+            modality: m.modality,
+            sources: m.sources,
+            searchQueries: m.searchQueries,
+          });
         })
         .catch((e) => console.warn("could not save message", e));
     },
@@ -137,7 +160,11 @@ export function useLiveAPI(): UseLiveAPIResults {
       if (!text) {
         if (i >= 0) list.splice(i, 1);
       } else {
-        const done: Message = { ...m, text, pending: false };
+        let done: Message = { ...m, text, pending: false };
+        if (m.role === "assistant" && turnSearch.current) {
+          done = { ...done, ...turnSearch.current };
+          turnSearch.current = null;
+        }
         if (i >= 0) list[i] = done;
         else list.push(done);
         persist(done);
@@ -158,7 +185,14 @@ export function useLiveAPI(): UseLiveAPIResults {
         else list.push(next);
         ref.current = next;
       } else {
-        const m: Message = { role, text: chunk, modality, pending: true, createdAt: Date.now() };
+        const m: Message = {
+          role,
+          text: chunk,
+          modality,
+          pending: true,
+          createdAt: Date.now(),
+          ...(role === "assistant" && turnSearch.current ? turnSearch.current : {}),
+        };
         list.push(m);
         ref.current = m;
       }
@@ -197,6 +231,20 @@ export function useLiveAPI(): UseLiveAPIResults {
     const onTurnComplete = () => {
       finalize(pendingUser);
       finalize(pendingAssistant);
+      turnSearch.current = null;
+    };
+    const onGrounding = (g: GroundingMetadata) => {
+      turnSearch.current = mergeSearch(turnSearch.current, g);
+      // show the sources on the answer while it is still streaming
+      const cur = pendingAssistant.current;
+      if (cur) {
+        const next: Message = { ...cur, ...turnSearch.current };
+        const list = messagesRef.current;
+        const i = list.indexOf(cur);
+        if (i >= 0) list[i] = next;
+        pendingAssistant.current = next;
+        publish();
+      }
     };
     const onToolCall = async (tc: LiveServerToolCall) => {
       const responses = await Promise.all(
@@ -245,13 +293,14 @@ export function useLiveAPI(): UseLiveAPIResults {
       .on("outputtranscription", onOutput)
       .on("text", onOutput)
       .on("turncomplete", onTurnComplete)
+      .on("grounding", onGrounding)
       .on("toolcall", onToolCall)
       .on("goaway", onGoAway);
     return () => {
       client.removeAllListeners();
       client.disconnect();
     };
-  }, [client, recorder, appendTo, finalize]);
+  }, [client, recorder, appendTo, finalize, publish]);
 
   // ---- microphone ------------------------------------------------------------------------------
   useEffect(() => {
@@ -278,7 +327,10 @@ export function useLiveAPI(): UseLiveAPIResults {
       setCanResume(false);
       setStatus("connecting");
       try {
-        const setup = await api.get<SetupResponse>("/api/live/setup");
+        // a continued conversation gives the assistant its earlier messages
+        const setup = await api.get<SetupResponse>(
+          `/api/live/setup${!resume && convIdRef.current ? `?conversation=${convIdRef.current}` : ""}`
+        );
         setMemoryCount(setup.memoryCount);
         const handle = resume ? client.resumptionHandle : null;
         if (!resume) client.resumptionHandle = null;
@@ -288,7 +340,9 @@ export function useLiveAPI(): UseLiveAPIResults {
           systemInstruction: { parts: [{ text: setup.systemInstruction }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          tools: [{ functionDeclarations: [recallDeclaration] }],
+          tools: setup.webSearch
+            ? [{ googleSearch: {} }, { functionDeclarations: [recallDeclaration] }]
+            : [{ functionDeclarations: [recallDeclaration] }],
           sessionResumption: handle ? { handle } : {},
           contextWindowCompression: { slidingWindow: {} },
         };
@@ -362,6 +416,22 @@ export function useLiveAPI(): UseLiveAPIResults {
     setLastRecall(null);
   }, [client, disconnect, publish]);
 
+  const continueConversation = useCallback(
+    async (id: number) => {
+      const c = await api.get<{ id: number; messages: Message[] }>(`/api/conversations/${id}`);
+      if (client.status !== "disconnected") disconnect();
+      client.resumptionHandle = null;
+      convIdRef.current = c.id;
+      setConversationId(c.id);
+      messagesRef.current = c.messages.map((m) => ({ ...m, pending: false }));
+      publish();
+      setCanResume(false);
+      setError(null);
+      setLastRecall(null);
+    },
+    [client, disconnect, publish]
+  );
+
   const setMicOn = useCallback((on: boolean) => setMicOnState(on), []);
   const clearError = useCallback(() => setError(null), []);
 
@@ -380,6 +450,7 @@ export function useLiveAPI(): UseLiveAPIResults {
     conversationId,
     sendText,
     newConversation,
+    continueConversation,
     memoryCount,
     lastRecall,
   };

@@ -50,6 +50,7 @@ function App() {
           onOpenHistory={openHistory}
           historyVersion={historyVersion}
           onOpenSettings={() => setSettingsOpen(true)}
+          memoryReviews={health?.memoryReviews ?? 0}
         />
         <main className="main">
           {(serverDown || (health && !health.hasKey)) && (
@@ -73,9 +74,11 @@ function App() {
               historyId={historyId}
               onCloseHistory={() => setHistoryId(null)}
               onHistoryChanged={() => setHistoryVersion((v) => v + 1)}
+              historyVersion={historyVersion}
+              memoryReviews={health?.memoryReviews ?? 0}
             />
           )}
-          {view === "memory" && <MemoryView />}
+          {view === "memory" && <MemoryView onReviewed={refreshHealth} />}
           {/* kept mounted so a meeting keeps recording while you look at other pages */}
           <MeetingView health={health} hidden={view !== "meeting"} />
         </main>

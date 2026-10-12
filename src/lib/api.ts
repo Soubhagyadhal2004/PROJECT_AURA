@@ -46,16 +46,21 @@ export type Settings = {
   voice: string;
   userName: string;
   autoMemory: boolean;
-  speakerMatchThreshold: number;
-  speakerClusterThreshold: number;
+  webSearch: boolean;
+  confirmMemoryChanges: boolean;
+  voiceMatchThreshold: number;
+  voiceClusterThreshold: number;
+  meetingLanguage: string;
+  meetingTranscriber: "live" | "standard";
 };
 
 export type Health = {
   ok: boolean;
   hasKey: boolean;
-  models: Record<"text" | "speaker", { state: string; error: string | null; model: string }>;
+  models: Record<"text" | "speaker" | "segmentation", { state: string; error: string | null; model: string }>;
   geminiModels: { text: string; transcribe: string };
   meetingWorker: { lastError: string | null; lastErrorAt: number | null };
+  memoryReviews: number;
   dataDir: string;
 };
 
@@ -66,7 +71,13 @@ export type Message = {
   text: string;
   createdAt?: number;
   pending?: boolean;
+  // web search used for an assistant answer
+  sources?: WebSource[];
+  searchQueries?: string[];
+  searchWidget?: string; // Google Search suggestions (HTML), shown only during the live session
 };
+
+export type WebSource = { title: string; uri: string };
 
 export type ConversationSummary = {
   id: number;
@@ -74,14 +85,29 @@ export type ConversationSummary = {
   startedAt: number;
   updatedAt: number;
   messageCount: number;
+  pinned: boolean;
+  renamed: boolean;
 };
 
 export type Conversation = {
   id: number;
-  title: string | null;
+  title: string;
+  renamed: boolean;
+  pinned: boolean;
   startedAt: number;
   updatedAt: number;
   messages: Message[];
+};
+
+export type MemoryProposal = {
+  id: number;
+  action: "update" | "retire" | "forget";
+  memoryId: number;
+  content: string | null;
+  category: string | null;
+  conversationId: number | null;
+  createdAt: number;
+  current: Memory | null;
 };
 
 export type Memory = {
@@ -103,6 +129,7 @@ export type SpeakerProfile = {
   sampleSeconds: number;
   consentNote: string;
   createdAt: number;
+  outdated: boolean;
 };
 
 export type MeetingSummary = {
@@ -131,8 +158,10 @@ export type Segment = {
   text: string | null;
   speakerScore: number | null;
   speakerUncertain: boolean;
-  status: "pending" | "done" | "error" | "empty";
+  // pending/analysing: finding the speaker; live: being transcribed in the browser; queued: waiting for transcription
+  status: "pending" | "analysing" | "live" | "queued" | "done" | "error" | "empty";
   error: string | null;
+  retryable: boolean;
 };
 
 export type Meeting = {
@@ -140,6 +169,7 @@ export type Meeting = {
   title: string;
   startedAt: number;
   endedAt: number | null;
+  refined: boolean;
   speakers: MeetingSpeaker[];
   segments: Segment[];
 };

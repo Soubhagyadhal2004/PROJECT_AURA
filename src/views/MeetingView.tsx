@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cn from "classnames";
-import { api, Health, Meeting, MeetingSpeaker, MeetingSummary, Segment } from "../lib/api";
+import { api, Health, Meeting, MeetingSpeaker, MeetingSummary, Segment, Settings, SpeakerProfile } from "../lib/api";
 import { clock, dateTime, relativeTime } from "../lib/format";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { Segmenter } from "../lib/segmenter";
+import { LiveTranscriber } from "../lib/live-transcriber";
+import { setFaviconState } from "../lib/favicon";
 import { useLiveAPIContext } from "../contexts/LiveAPIContext";
 import ConfirmButton from "../components/ConfirmButton";
 import VoiceProfiles from "./VoiceProfiles";
 import Orb from "../components/Orb";
 
 const SPEAKER_HUES = [38, 200, 150, 280, 340, 95, 15, 250];
+const BUSY: Segment["status"][] = ["pending", "analysing", "live", "queued"];
 
 export default function MeetingView({ health, hidden }: { health: Health | null; hidden?: boolean }) {
   const [tab, setTab] = useState<"transcripts" | "voices">("transcripts");
@@ -40,6 +43,15 @@ export default function MeetingView({ health, hidden }: { health: Health | null;
   };
 
   const speakerModel = health?.models.speaker;
+  const segModel = health?.models.segmentation;
+  const [outdatedProfiles, setOutdatedProfiles] = useState(0);
+  useEffect(() => {
+    if (hidden) return;
+    api
+      .get<SpeakerProfile[]>("/api/speakers")
+      .then((ps) => setOutdatedProfiles(ps.filter((p) => p.outdated).length))
+      .catch(() => {});
+  }, [hidden, tab]);
 
   return (
     <section className={cn("view meeting", { "is-hidden": hidden })} aria-hidden={hidden}>
@@ -75,10 +87,29 @@ export default function MeetingView({ health, hidden }: { health: Health | null;
           </span>
         </div>
       )}
-      {speakerModel?.state === "loading" && (
+      {(speakerModel?.state === "loading" || segModel?.state === "loading") && (
         <div className="banner banner--info">
           <span className="material-symbols-outlined">downloading</span>
-          <span>Loading the local speaker-recognition model. The first run downloads a few hundred MB, so this can take a while…</span>
+          <span>Loading the local speaker-recognition models. The first run downloads about 35 MB, so this can take a moment…</span>
+        </div>
+      )}
+      {segModel?.state === "error" && (
+        <div className="banner banner--warn">
+          <span className="material-symbols-outlined">warning</span>
+          <span>
+            The speaker-change model couldn't load ({segModel.error}). Each piece of speech will go to one speaker, even when two people talk back to back.
+          </span>
+        </div>
+      )}
+      {outdatedProfiles > 0 && tab === "transcripts" && (
+        <div className="banner banner--warn">
+          <span className="material-symbols-outlined">record_voice_over</span>
+          <span>
+            {outdatedProfiles} voice profile{outdatedProfiles === 1 ? " was" : "s were"} recorded with the previous voice model and won't be recognised.
+          </span>
+          <button className="btn btn--small" onClick={() => setTab("voices")}>
+            Re-record
+          </button>
         </div>
       )}
 
@@ -150,22 +181,75 @@ function useMeetingRecorder(onError: (e: string) => void) {
   const recorderRef = useRef<AudioRecorder | null>(null);
   const segRef = useRef<Segmenter | null>(null);
   const idRef = useRef<number | null>(null);
+  // Live transcription (Gemini 3.5 Transcribe Live); null = standard transcription
+  const liveRef = useRef<LiveTranscriber | null>(null);
+  const inFlight = useRef(new Set<Promise<unknown>>());
+  const [transcriber, setTranscriber] = useState<"live" | "standard">("standard");
+
+  const track = useCallback((p: Promise<unknown>) => {
+    setUploads((u) => u + 1);
+    inFlight.current.add(p);
+    p.finally(() => {
+      inFlight.current.delete(p);
+      setUploads((u) => u - 1);
+    });
+  }, []);
 
   const upload = useCallback(
     (id: number, s: { startMs: number; endMs: number; pcm: ArrayBuffer }) => {
-      setUploads((u) => u + 1);
-      api
-        .postAudio(`/api/meetings/${id}/segments?start=${Math.round(s.startMs)}&end=${Math.round(s.endMs)}`, s.pcm)
-        .catch((e) => onError(`A piece of audio couldn't be saved: ${e.message}`))
-        .finally(() => setUploads((u) => u - 1));
+      const q = `start=${Math.round(s.startMs)}&end=${Math.round(s.endMs)}`;
+      const lt = liveRef.current;
+      if (!lt) {
+        track(api.postAudio(`/api/meetings/${id}/segments?${q}`, s.pcm).catch((e) => onError(`A piece of audio couldn't be saved: ${e.message}`)));
+        return;
+      }
+      const pcm = new Int16Array(s.pcm);
+      track(
+        api
+          .postAudio<{ turns: { id: number; startMs: number; endMs: number }[] }>(`/api/meetings/${id}/segments?${q}&live=1`, s.pcm)
+          .then(({ turns }) =>
+            Promise.all(
+              turns.map(async (t) => {
+                // the server split the piece by speaker: transcribe each turn on its own
+                const from = Math.max(0, Math.round(((t.startMs - s.startMs) / 1000) * 16000));
+                const to = Math.min(pcm.length, Math.round(((t.endMs - s.startMs) / 1000) * 16000));
+                const post = (body: object) => api.post(`/api/meetings/${id}/segments/${t.id}/transcript`, body);
+                const current = liveRef.current;
+                if (!current) return post({ failed: true });
+                try {
+                  await post({ text: await current.transcribe(pcm.slice(from, to)) });
+                } catch (e: any) {
+                  if (liveRef.current) {
+                    liveRef.current.close();
+                    liveRef.current = null;
+                    setTranscriber("standard");
+                    onError(`Live transcription stopped working (${e.message}). The rest of this meeting uses standard transcription.`);
+                  }
+                  await post({ failed: true });
+                }
+              })
+            )
+          )
+          .catch((e) => onError(`A piece of audio couldn't be saved: ${e.message}`))
+      );
     },
-    [onError]
+    [onError, track]
   );
 
   const start = useCallback(
     async (id: number) => {
       if (live.status !== "disconnected") live.disconnect(); // one microphone user at a time
       setStarting(true);
+      liveRef.current?.close();
+      liveRef.current = null;
+      try {
+        const [settings, profiles] = await Promise.all([api.get<Settings>("/api/settings"), api.get<SpeakerProfile[]>("/api/speakers")]);
+        if (settings.meetingTranscriber === "live") {
+          // names help the transcriber spell people correctly
+          liveRef.current = new LiveTranscriber({ vocabulary: [...new Set(profiles.map((p) => p.name))] });
+        }
+      } catch {}
+      setTranscriber(liveRef.current ? "live" : "standard");
       const r = new AudioRecorder();
       const seg = new Segmenter((s) => upload(id, s));
       r.on("pcm", (buf: ArrayBuffer) => {
@@ -176,6 +260,8 @@ function useMeetingRecorder(onError: (e: string) => void) {
         await r.start();
       } catch (e: any) {
         setStarting(false);
+        liveRef.current?.close();
+        liveRef.current = null;
         await api.del(`/api/meetings/${id}`).catch(() => {}); // nothing was recorded
         throw e;
       }
@@ -200,8 +286,18 @@ function useMeetingRecorder(onError: (e: string) => void) {
     setMeetingId(null);
     setLevel(0);
     if (id) await api.patch(`/api/meetings/${id}`, { ended: true }).catch(() => {});
+    // let the last turns finish transcribing, then close the Live session
+    const lt = liveRef.current;
+    if (lt) {
+      await Promise.allSettled([...inFlight.current]);
+      if (liveRef.current === lt) {
+        lt.close();
+        liveRef.current = null;
+      }
+    }
   }, []);
 
+  useEffect(() => setFaviconState({ recording: meetingId != null }), [meetingId]);
   useEffect(() => {
     if (!meetingId) return;
     const t = setInterval(() => setElapsed(segRef.current?.elapsedMs ?? 0), 500);
@@ -213,7 +309,7 @@ function useMeetingRecorder(onError: (e: string) => void) {
     recorderRef.current?.stop();
   }, []);
 
-  return { meetingId, recording: meetingId != null, starting, elapsed, level, uploads, start, stop };
+  return { meetingId, recording: meetingId != null, starting, elapsed, level, uploads, transcriber, start, stop };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -245,15 +341,17 @@ function MeetingDetail({
       .catch((e) => onError(e.message));
   }, [id, onError]);
 
-  const pending = m?.segments.filter((s) => s.status === "pending").length ?? 0;
+  const pending = m?.segments.filter((s) => BUSY.includes(s.status)).length ?? 0;
+  // after recording stops, speakers are re-checked once everything is transcribed
+  const refining = !!m && !!m.endedAt && !m.refined && m.segments.length > 0;
   useEffect(() => {
     load();
   }, [load]);
   useEffect(() => {
-    if (!recordingThis && !pending && !rec.uploads) return;
+    if (!recordingThis && !pending && !rec.uploads && !refining) return;
     const t = setInterval(load, 1500);
     return () => clearInterval(t);
-  }, [recordingThis, pending, rec.uploads, load]);
+  }, [recordingThis, pending, rec.uploads, refining, load]);
 
   const segCount = m?.segments.length ?? 0;
   useEffect(() => {
@@ -265,6 +363,7 @@ function MeetingDetail({
   if (!m) return <div className="meeting__detail" />;
 
   const failed = m.segments.filter((s) => s.status === "error").length;
+  const emptyRetryable = m.segments.filter((s) => s.status === "empty" && s.retryable).length;
   const call = async (p: Promise<unknown>) => {
     try {
       await p;
@@ -303,7 +402,12 @@ function MeetingDetail({
         <div className="recbar">
           <Orb size={40} level={rec.level * 8} active tone="recording" />
           <div className="recbar__info">
-            <strong>Recording {clock(rec.elapsed)}</strong>
+            <strong>
+              Recording {clock(rec.elapsed)}
+              <span className="recbar__mode" title={rec.transcriber === "live" ? "Gemini 3.5 Transcribe Live" : "Batched Gemini requests"}>
+                {rec.transcriber === "live" ? "Live transcription" : "Standard transcription"}
+              </span>
+            </strong>
             <span>{pending + rec.uploads > 0 ? `Processing ${pending + rec.uploads} piece${pending + rec.uploads === 1 ? "" : "s"} of speech…` : "Waiting for speech"}</span>
           </div>
           <button className="btn btn--stop" onClick={() => rec.stop().then(() => { load(); onChanged(); })}>
@@ -313,6 +417,17 @@ function MeetingDetail({
         </div>
       )}
       {!recordingThis && pending > 0 && <p className="muted">Finishing {pending} remaining piece{pending === 1 ? "" : "s"}…</p>}
+      {!recordingThis && !pending && refining && <p className="muted">Re-checking speakers across the whole meeting…</p>}
+      {!failed && emptyRetryable > 0 && !recordingThis && !pending && (
+        <div className="banner banner--info">
+          <span>
+            {emptyRetryable} piece{emptyRetryable === 1 ? "" : "s"} came back without words. If people were talking, try transcribing again.
+          </span>
+          <button className="btn btn--small" onClick={() => call(api.post(`/api/meetings/${id}/retry`))}>
+            Try again
+          </button>
+        </div>
+      )}
       {failed > 0 && (
         <div className="banner banner--error">
           <span>{failed} piece{failed === 1 ? "" : "s"} couldn't be transcribed ({m.segments.find((s) => s.status === "error")?.error}).</span>
@@ -422,7 +537,6 @@ function TranscriptRow({
 }) {
   const [editText, setEditText] = useState<string | null>(null);
   const sp = s.speakerId ? speakers.get(s.speakerId) : undefined;
-  if (s.status === "empty") return null;
 
   const patch = async (body: object) => {
     await api.patch(`/api/meetings/${meetingId}/segments/${s.id}`, body).catch((e) => onError(e.message));
@@ -430,7 +544,7 @@ function TranscriptRow({
   };
 
   return (
-    <li className={cn("tline", { "tline--pending": s.status === "pending" })} style={{ ["--hue" as any]: sp?.hue ?? 0 }}>
+    <li className={cn("tline", { "tline--pending": BUSY.includes(s.status), "tline--empty": s.status === "empty" })} style={{ ["--hue" as any]: sp?.hue ?? 0 }}>
       <span className="tline__time">{clock(s.startMs)}</span>
       <div className="tline__who">
         <select
@@ -471,10 +585,14 @@ function TranscriptRow({
             }}
             rows={2}
           />
-        ) : s.status === "pending" ? (
+        ) : BUSY.includes(s.status) ? (
           <span className="muted">Transcribing…</span>
         ) : s.status === "error" ? (
           <span className="muted">Not transcribed yet</span>
+        ) : s.status === "empty" ? (
+          <span className="muted" onDoubleClick={() => setEditText("")} title="Double-click to type what was said">
+            No words recognised
+          </span>
         ) : (
           <span onDoubleClick={() => setEditText(s.text || "")} title="Double-click to correct the text">
             {s.text}

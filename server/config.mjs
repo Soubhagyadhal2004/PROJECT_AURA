@@ -21,13 +21,17 @@ export const PORT = Number(process.env.AURA_PORT || 3001);
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 // Gemini models used by the server (text + audio understanding).
-export const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-flash-latest";
+export const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash-lite";
 export const TRANSCRIBE_MODEL =
-  process.env.GEMINI_TRANSCRIBE_MODEL || "gemini-flash-lite-latest";
+  process.env.GEMINI_TRANSCRIBE_MODEL || "gemini-3.5-flash-lite";
 
 // Local models (downloaded once from the Hugging Face hub, then run on this machine).
 export const TEXT_EMBED_MODEL =
   process.env.AURA_TEXT_EMBED_MODEL || "Xenova/all-MiniLM-L6-v2";
+// voiceprints (WeSpeaker ResNet34, the embedding model used by pyannote 3.x)
 export const SPEAKER_MODEL =
-  process.env.AURA_SPEAKER_MODEL || "Xenova/wavlm-base-plus-sv";
+  process.env.AURA_SPEAKER_MODEL || "onnx-community/wespeaker-voxceleb-resnet34-LM";
+// speaker-change detection inside a piece of speech (pyannote segmentation 3.0)
+export const SEGMENTATION_MODEL =
+  process.env.AURA_SEGMENTATION_MODEL || "onnx-community/pyannote-segmentation-3.0";
 export const MODEL_CACHE_DIR = path.join(DATA_DIR, "models");

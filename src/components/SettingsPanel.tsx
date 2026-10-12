@@ -5,7 +5,8 @@ import { useLiveAPIContext } from "../contexts/LiveAPIContext";
 import ConfirmButton from "./ConfirmButton";
 
 const VOICES = ["Kore", "Puck", "Charon", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr"];
-const LIVE_MODELS = ["gemini-3.1-flash-live-preview", "gemini-2.5-flash-native-audio-latest"];
+// Live API models (free tier: no daily request cap). Web search on the free tier may need a 2.5 model.
+const LIVE_MODELS = ["gemini-3.1-flash-live-preview", "gemini-3.8-live", "gemini-2.5-flash-native-audio-preview-12-2025"];
 
 type Props = { open: boolean; onClose: () => void; health: Health | null; onDataChanged: () => void };
 
@@ -91,24 +92,56 @@ export default function SettingsPanel({ open, onClose, health, onDataChanged }: 
                 <input type="checkbox" checked={s.autoMemory} onChange={(e) => update({ autoMemory: e.target.checked })} />
                 <span>Learn memories from conversations automatically</span>
               </label>
-              <p className="muted small">Voice and model changes apply to the next voice session.</p>
+              <label className="check">
+                <input type="checkbox" checked={s.confirmMemoryChanges} onChange={(e) => update({ confirmMemoryChanges: e.target.checked })} />
+                <span>Ask me before changing or removing a memory I already have</span>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={s.webSearch} onChange={(e) => update({ webSearch: e.target.checked })} />
+                <span>Let AURA search the web (Google Search) for news and current information</span>
+              </label>
+              <p className="muted small">Voice, model and search changes apply to the next voice session.</p>
             </section>
 
             <section>
-              <h3>Meeting speaker recognition</h3>
+              <h3>Meeting Mode</h3>
+              <fieldset className="field">
+                <legend>Transcription</legend>
+                <label className="check">
+                  <input type="radio" name="transcriber" checked={s.meetingTranscriber === "live"} onChange={() => update({ meetingTranscriber: "live" })} />
+                  <span>
+                    Live: Gemini 3.5 Transcribe Live, streamed while you talk. No daily request limit on the free tier. Picks up languages automatically.
+                  </span>
+                </label>
+                <label className="check">
+                  <input type="radio" name="transcriber" checked={s.meetingTranscriber === "standard"} onChange={() => update({ meetingTranscriber: "standard" })} />
+                  <span>Standard: a few seconds of speech per request to {health?.geminiModels.transcribe || "Gemini Flash-Lite"}. Uses the daily request quota.</span>
+                </label>
+              </fieldset>
               <label className="field">
-                <span>
-                  Name a registered voice from similarity <strong>{s.speakerMatchThreshold.toFixed(2)}</strong>
-                </span>
-                <input type="range" min={0.6} max={0.95} step={0.01} value={s.speakerMatchThreshold} onChange={(e) => update({ speakerMatchThreshold: Number(e.target.value) })} />
+                <span>Languages spoken in meetings (optional)</span>
+                <input
+                  value={s.meetingLanguage}
+                  onChange={(e) => update({ meetingLanguage: e.target.value })}
+                  placeholder="e.g. English and Hindi, Hindi words in Latin script"
+                />
               </label>
               <label className="field">
                 <span>
-                  Treat as the same unknown speaker from <strong>{s.speakerClusterThreshold.toFixed(2)}</strong>
+                  Name a registered voice from similarity <strong>{s.voiceMatchThreshold.toFixed(2)}</strong>
                 </span>
-                <input type="range" min={0.5} max={0.95} step={0.01} value={s.speakerClusterThreshold} onChange={(e) => update({ speakerClusterThreshold: Number(e.target.value) })} />
+                <input type="range" min={0.2} max={0.9} step={0.01} value={s.voiceMatchThreshold} onChange={(e) => update({ voiceMatchThreshold: Number(e.target.value) })} />
               </label>
-              <p className="muted small">Higher values mean fewer wrong names but more people split into extra speakers.</p>
+              <label className="field">
+                <span>
+                  Treat as an already-heard voice from <strong>{s.voiceClusterThreshold.toFixed(2)}</strong>
+                </span>
+                <input type="range" min={0.2} max={0.9} step={0.01} value={s.voiceClusterThreshold} onChange={(e) => update({ voiceClusterThreshold: Number(e.target.value) })} />
+              </label>
+              <p className="muted small">
+                Higher values mean fewer wrong names but more people split into extra speakers. Use <em>Test recognition</em> on the Voice profiles page to see
+                the scores your voices get.
+              </p>
             </section>
 
             <div className="drawer__save">

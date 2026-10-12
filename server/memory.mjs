@@ -248,9 +248,17 @@ export async function extractFromConversation(conversationId) {
   const out = await generateJSON({ system: EXTRACT_SYSTEM, prompt, schema: EXTRACT_SCHEMA });
   const applied = [];
   const known = new Set(candidates.map((c) => c.id));
+  const confirm = getSettings().confirmMemoryChanges;
   for (const op of out.operations || []) {
     const content = String(op.content || "").trim();
     try {
+      // changes to facts the user already has: ask first
+      if (confirm && ["update", "retire", "forget"].includes(op.action) && known.has(op.memory_id)) {
+        if (op.action === "update" && !content) continue;
+        const p = propose({ action: op.action, memoryId: op.memory_id, content, category: op.category, conversationId });
+        if (p) applied.push({ op: "proposed", proposal: p });
+        continue;
+      }
       if (op.action === "add" && content) {
         applied.push({ op: "add", memory: await addMemory({ content, category: op.category, source: "conversation", conversationId }) });
       } else if (op.action === "update" && content && known.has(op.memory_id)) {
@@ -269,6 +277,84 @@ export async function extractFromConversation(conversationId) {
   db.prepare("UPDATE conversations SET extracted_upto = ? WHERE id = ?").run(lastId, conversationId);
   if (applied.length) console.log(`[memory] conversation ${conversationId}:`, applied.map((a) => a.op).join(", "));
   return applied;
+}
+
+// ---------------------------------------------------------------------------
+// Review: proposed changes to existing memories
+// ---------------------------------------------------------------------------
+
+const proposalOut = (r) => ({
+  id: r.id,
+  action: r.action,
+  memoryId: r.memory_id,
+  content: r.content,
+  category: r.category,
+  conversationId: r.conversation_id,
+  status: r.status,
+  createdAt: r.created_at,
+  current: getMemory(r.memory_id),
+});
+
+function propose({ action, memoryId, content, category, conversationId }) {
+  const target = db.prepare("SELECT * FROM memories WHERE id = ? AND status = 'active'").get(memoryId);
+  if (!target) return null;
+  if (action === "update" && norm(content) === norm(target.content)) return null; // nothing changes
+  // don't ask twice for the same change, and don't re-ask one the user turned down
+  const same = db
+    .prepare("SELECT * FROM memory_proposals WHERE memory_id = ? AND action = ? AND status IN ('pending','rejected')")
+    .all(memoryId, action)
+    .find((p) => action !== "update" || norm(p.content) === norm(content));
+  if (same) return null;
+  // a newer proposal for the same memory replaces an older pending one
+  db.prepare("DELETE FROM memory_proposals WHERE memory_id = ? AND status = 'pending'").run(memoryId);
+  const id = db
+    .prepare("INSERT INTO memory_proposals(action, memory_id, content, category, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(action, memoryId, content || null, CATEGORIES.includes(category) ? category : null, conversationId, now()).lastInsertRowid;
+  return proposalOut(db.prepare("SELECT * FROM memory_proposals WHERE id = ?").get(id));
+}
+
+export function listProposals() {
+  return db
+    .prepare(
+      `SELECT p.* FROM memory_proposals p JOIN memories m ON m.id = p.memory_id
+       WHERE p.status = 'pending' AND m.status = 'active' ORDER BY p.created_at`
+    )
+    .all()
+    .map(proposalOut);
+}
+
+export const pendingProposalCount = () =>
+  db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM memory_proposals p JOIN memories m ON m.id = p.memory_id
+       WHERE p.status = 'pending' AND m.status = 'active'`
+    )
+    .get().n;
+
+/** Apply a proposed change. For updates the user may adjust the wording first. */
+export async function acceptProposal(id, { content } = {}) {
+  const p = db.prepare("SELECT * FROM memory_proposals WHERE id = ? AND status = 'pending'").get(id);
+  if (!p) return null;
+  let result = null;
+  if (p.action === "update") {
+    const text = String(content ?? p.content ?? "").trim();
+    if (!text) throw Object.assign(new Error("The new memory can't be empty."), { status: 400 });
+    result = await supersede(p.memory_id, text, p.category, p.conversation_id);
+  } else if (p.action === "retire") {
+    db.prepare("UPDATE memories SET status = 'outdated', updated_at = ? WHERE id = ? AND status = 'active'").run(now(), p.memory_id);
+  } else if (p.action === "forget") {
+    deleteMemory(p.memory_id); // also removes the proposal (cascade)
+  }
+  db.prepare("UPDATE memory_proposals SET status = 'accepted', decided_at = ? WHERE id = ?").run(now(), id);
+  return { ok: true, memory: result };
+}
+
+/** Keep the memory as it is. */
+export function rejectProposal(id) {
+  const n = db.prepare("UPDATE memory_proposals SET status = 'rejected', decided_at = ? WHERE id = ? AND status = 'pending'").run(now(), id).changes;
+  // the user just confirmed the current fact
+  if (n) db.prepare("UPDATE memories SET updated_at = ? WHERE id = (SELECT memory_id FROM memory_proposals WHERE id = ?)").run(now(), id);
+  return n > 0;
 }
 
 // Debounced, serialised background extraction ---------------------------------

@@ -20,7 +20,7 @@
     "build": "react-scripts build",
     "serve": "node server/index.mjs",
     "test": "react-scripts test",
-    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs"
+    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs"
   },
   "eslintConfig": {
     "extends": [

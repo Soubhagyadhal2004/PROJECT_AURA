@@ -20,6 +20,7 @@
 
 import {
   GoogleGenAI,
+  GroundingMetadata,
   LiveCallbacks,
   LiveClientToolResponse,
   LiveConnectConfig,
@@ -50,6 +51,8 @@ export interface LiveClientEventTypes {
   text: (text: string) => void;
   /** the server will close the connection soon */
   goaway: (timeLeft?: string) => void;
+  /** Google Search results used for the current answer */
+  grounding: (metadata: GroundingMetadata) => void;
 }
 
 export type LiveStatus = "disconnected" | "connecting" | "connected";
@@ -154,6 +157,9 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
     }
     if (sc.outputTranscription?.text) {
       this.emit("outputtranscription", sc.outputTranscription.text);
+    }
+    if (sc.groundingMetadata) {
+      this.emit("grounding", sc.groundingMetadata);
     }
     const parts: Part[] = sc.modelTurn?.parts || [];
     for (const p of parts) {

@@ -11,9 +11,10 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "aura-test-"));
 process.env.AURA_DATA_DIR = dataDir;
 process.env.GEMINI_API_KEY = "test-key";
 process.env.AURA_NO_WARMUP = "1";
+process.env.AURA_BATCH_WAIT_MS = "30";
 
 // ---- fakes ---------------------------------------------------------------------------
-// speaker "voice" k is encoded in the first PCM sample; each voice maps to a fixed random vector
+// speaker "voice" k is encoded as a marker sample at the start of each turn; each voice maps to a fixed random vector
 function seeded(seed) {
   let s = seed;
   return () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648) * 2 - 1;
@@ -27,6 +28,7 @@ function voiceVector(k) {
   return voices.get(k);
 }
 let noiseSeed = 1;
+let noise = 0.15;
 const normalize = (v) => {
   const n = Math.hypot(...v) || 1;
   return Float32Array.from(v, (x) => x / n);
@@ -38,7 +40,7 @@ const cosine = (a, b) => {
 };
 mock.module(new URL("../models.mjs", import.meta.url).href, {
   namedExports: {
-    modelStatus: { text: { state: "error" }, speaker: { state: "ready" } },
+    modelStatus: { text: { state: "error" }, speaker: { state: "ready" }, segmentation: { state: "ready" } },
     warmUp: () => {},
     normalize,
     cosine,
@@ -46,7 +48,19 @@ mock.module(new URL("../models.mjs", import.meta.url).href, {
     embedSpeaker: async (samples) => {
       const k = Math.round(samples[0] * 32768);
       const r = seeded(noiseSeed++);
-      return normalize(Array.from(voiceVector(k), (x) => x + r() * 0.15));
+      return normalize(Array.from(voiceVector(k), (x) => x + r() * noise));
+    },
+    // turns start at each marker sample; the same voice gets the same local index
+    speakerTurns: async (samples) => {
+      const dur = samples.length / 16000;
+      const marks = [];
+      for (let i = 0; i < samples.length; i++) if (samples[i] !== 0) marks.push({ at: i / 16000, v: Math.round(samples[i] * 32768) });
+      const local = new Map();
+      const turns = marks.map((m, i) => {
+        if (!local.has(m.v)) local.set(m.v, local.size);
+        return { start: i === 0 ? 0 : m.at, end: marks[i + 1]?.at ?? dur, local: local.get(m.v) };
+      });
+      return turns.length ? turns : [{ start: 0, end: dur, local: 0 }];
     },
   },
 });
@@ -61,9 +75,11 @@ mock.module(new URL("../gemini.mjs", import.meta.url).href, {
       geminiCalls.json.push(args);
       return { operations: nextOps };
     },
-    transcribeSegments: async (bufs) => {
+    transcribeSegments: async (bufs, opts) => {
       geminiCalls.transcribe++;
-      return bufs.map((b) => `words from voice ${b.readInt16LE(0)}`);
+      geminiCalls.lastTranscribe = { n: bufs.length, ...opts };
+      const texts = bufs.map((b) => `words from voice ${b.readInt16LE(0)}`);
+      return { texts, raw: { transcripts: texts }, count: texts.length };
     },
   },
 });
@@ -80,10 +96,13 @@ const j = async (method, url, body) => {
   return { status: r.status, data: t ? JSON.parse(t) : null, text: t };
 };
 const pcm = (voice, seconds) => {
-  const b = Buffer.alloc(seconds * 16000 * 2);
+  const b = Buffer.alloc(Math.round(seconds * 16000) * 2);
   b.writeInt16LE(voice, 0);
   return b;
 };
+// one piece of speech with several speakers back to back: [[voice, seconds], ...]
+const turnsPcm = (turns) => Buffer.concat(turns.map(([v, s]) => pcm(v, s)));
+const settled = (d) => d.segments.every((s) => s.status !== "pending" && s.status !== "queued");
 const until = async (fn, ms = 3000) => {
   const t0 = Date.now();
   for (;;) {
@@ -109,6 +128,7 @@ test("conversation messages are stored and listed", async () => {
 });
 
 test("memory extraction adds, updates (keeping history) and retires facts", async () => {
+  await j("PUT", "/api/settings", { confirmMemoryChanges: false }); // apply changes directly
   const c = (await j("POST", "/api/conversations")).data;
   await j("POST", `/api/conversations/${c.id}/messages`, { role: "user", text: "I work at Infosys and my sister is Priya." });
   await j("POST", `/api/conversations/${c.id}/messages`, { role: "assistant", text: "Noted." });
@@ -155,6 +175,105 @@ test("memory extraction adds, updates (keeping history) and retires facts", asyn
   assert.deepEqual((await j("POST", `/api/memories/extract/${c.id}`)).data, []);
 });
 
+test("changes to existing memories wait for the user's OK", async () => {
+  await j("PUT", "/api/settings", { confirmMemoryChanges: true });
+  const c = (await j("POST", "/api/conversations")).data;
+  await j("POST", `/api/conversations/${c.id}/messages`, { role: "user", text: "I live in Pune and I drive a Swift." });
+  nextOps = [
+    { action: "add", content: "The user lives in Pune.", category: "personal" },
+    { action: "add", content: "The user drives a Maruti Swift.", category: "personal" },
+  ];
+  const added = (await j("POST", `/api/memories/extract/${c.id}`)).data;
+  const pune = added[0].memory;
+  const swift = added[1].memory;
+
+  await j("POST", `/api/conversations/${c.id}/messages`, { role: "user", text: "I moved to Bengaluru. Also sold the car." });
+  nextOps = [
+    { action: "update", memory_id: pune.id, content: "The user lives in Bengaluru.", category: "personal" },
+    { action: "retire", memory_id: swift.id },
+  ];
+  const r = (await j("POST", `/api/memories/extract/${c.id}`)).data;
+  assert.deepEqual(r.map((x) => x.op), ["proposed", "proposed"]);
+  // nothing changed yet
+  let all = (await j("GET", "/api/memories")).data;
+  assert.equal(all.find((m) => m.id === pune.id).status, "active");
+  assert.equal(all.find((m) => m.id === swift.id).status, "active");
+  assert.equal((await j("GET", "/api/health")).data.memoryReviews, 2);
+
+  const props = (await j("GET", "/api/memories/proposals")).data;
+  assert.equal(props.length, 2);
+  const upd = props.find((p) => p.action === "update");
+  assert.equal(upd.current.content, "The user lives in Pune.");
+  assert.equal(upd.content, "The user lives in Bengaluru.");
+
+  // accept the update with an edit, keep the car
+  await j("POST", `/api/memories/proposals/${upd.id}/accept`, { content: "The user lives in Bengaluru (Koramangala)." });
+  await j("POST", `/api/memories/proposals/${props.find((p) => p.action === "retire").id}/reject`);
+  all = (await j("GET", "/api/memories")).data;
+  assert.equal(all.find((m) => m.id === pune.id).status, "superseded");
+  assert.ok(all.some((m) => m.status === "active" && m.content === "The user lives in Bengaluru (Koramangala)."));
+  assert.equal(all.find((m) => m.id === swift.id).status, "active");
+  assert.equal((await j("GET", "/api/health")).data.memoryReviews, 0);
+
+  // a change the user turned down is not asked again
+  await j("POST", `/api/conversations/${c.id}/messages`, { role: "user", text: "No car any more." });
+  nextOps = [{ action: "retire", memory_id: swift.id }];
+  assert.deepEqual((await j("POST", `/api/memories/extract/${c.id}`)).data, []);
+});
+
+test("conversations can be renamed, pinned, exported and continued", async () => {
+  const a = (await j("POST", "/api/conversations")).data;
+  await j("POST", `/api/conversations/${a.id}/messages`, { role: "user", text: "Plan my Goa trip" });
+  await j("POST", `/api/conversations/${a.id}/messages`, { role: "assistant", text: "Sure, when are you going?" });
+  const b = (await j("POST", "/api/conversations")).data;
+  await j("POST", `/api/conversations/${b.id}/messages`, { role: "user", text: "Newer chat" });
+
+  let got = (await j("PATCH", `/api/conversations/${a.id}`, { title: "Goa trip", pinned: true })).data;
+  assert.equal(got.title, "Goa trip");
+  assert.equal(got.pinned, true);
+  const list = (await j("GET", "/api/conversations")).data;
+  assert.equal(list[0].id, a.id, "pinned first even though older");
+  // clearing the name goes back to the automatic title
+  got = (await j("PATCH", `/api/conversations/${a.id}`, { title: "" })).data;
+  assert.equal(got.title, "Plan my Goa trip");
+  await j("PATCH", `/api/conversations/${a.id}`, { title: "Goa trip" });
+
+  const md = await fetch(`${B}/api/conversations/${a.id}/export?format=md`);
+  assert.match(md.headers.get("content-disposition"), /Goa_trip\.md/);
+  const body = await md.text();
+  assert.match(body, /^# Goa trip/);
+  assert.match(body, /\*\*You\*\*: Plan my Goa trip/);
+  const json = JSON.parse(await (await fetch(`${B}/api/conversations/${a.id}/export?format=json`)).text());
+  assert.equal(json.messages.length, 2);
+
+  // continuing: the assistant is given the earlier messages
+  const setup = (await j("GET", `/api/live/setup?conversation=${a.id}`)).data;
+  assert.match(setup.systemInstruction, /continuing an earlier conversation/);
+  assert.match(setup.systemInstruction, /User: Plan my Goa trip\nAURA: Sure, when are you going\?/);
+  assert.doesNotMatch((await j("GET", "/api/live/setup")).data.systemInstruction, /earlier conversation/);
+});
+
+test("meeting: live transcription mode returns turns and takes text from the browser", async () => {
+  const m = (await j("POST", "/api/meetings", { title: "Live" })).data;
+  const r = (await j("POST", `/api/meetings/${m.id}/segments?start=0&end=5000&live=1`, turnsPcm([[10, 2.5], [11, 2.5]]))).data;
+  assert.equal(r.turns.length, 2);
+  assert.deepEqual(r.turns.map((t) => [t.startMs, t.endMs]), [[0, 2500], [2500, 5000]]);
+  let d = (await j("GET", `/api/meetings/${m.id}`)).data;
+  assert.deepEqual(d.segments.map((s) => s.status), ["live", "live"]);
+  const before = geminiCalls.transcribe;
+  await j("POST", `/api/meetings/${m.id}/segments/${r.turns[0].id}/transcript`, { text: "namaste everyone" });
+  // the browser couldn't transcribe the second turn: the server does it the standard way
+  await j("POST", `/api/meetings/${m.id}/segments/${r.turns[1].id}/transcript`, { failed: true });
+  d = await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return settled(x) && x.segments.every((s) => s.status !== "live") && x;
+  });
+  assert.equal(d.segments[0].text, "namaste everyone");
+  assert.equal(d.segments[1].text, "words from voice 11");
+  assert.equal(geminiCalls.transcribe, before + 1);
+  assert.equal(new Set(d.segments.map((s) => s.speakerId)).size, 2);
+});
+
 test("memories can be edited, restored and deleted", async () => {
   const m = (await j("POST", "/api/memories", { content: "The user likes jazz.", category: "preference" })).data;
   const e = (await j("PATCH", `/api/memories/${m.id}`, { content: "The user likes jazz and blues." })).data;
@@ -189,7 +308,7 @@ test("meeting: registered voice gets its name, unknown voices get stable Speaker
   await j("POST", `/api/meetings/${m.id}/segments?start=${t}&end=${t + 500}`, pcm(2, 0.5));
   const done = await until(async () => {
     const d = (await j("GET", `/api/meetings/${m.id}`)).data;
-    return d.segments.every((s) => s.status !== "pending") && d;
+    return settled(d) && d;
   });
   const label = new Map(done.speakers.map((s) => [s.id, s.label]));
   const labels = done.segments.map((s) => label.get(s.speakerId));
@@ -213,7 +332,7 @@ test("meeting: registered voice gets its name, unknown voices get stable Speaker
   await j("POST", `/api/meetings/${m.id}/segments?start=28000&end=30000`, pcm(3, 2));
   d = await until(async () => {
     const x = (await j("GET", `/api/meetings/${m.id}`)).data;
-    return x.segments.every((s) => s.status !== "pending") && x;
+    return settled(x) && x;
   });
   assert.equal(d.segments.at(-1).speakerId, s1.id, "voice 3 now goes to Ravi");
 
@@ -221,7 +340,7 @@ test("meeting: registered voice gets its name, unknown voices get stable Speaker
   await j("POST", `/api/meetings/${m.id}/segments?start=30000&end=32000`, pcm(4, 2));
   d = await until(async () => {
     const x = (await j("GET", `/api/meetings/${m.id}`)).data;
-    return x.segments.every((s) => s.status !== "pending") && x;
+    return settled(x) && x;
   });
   assert.equal(new Map(d.speakers.map((s) => [s.id, s.label])).get(d.segments.at(-1).speakerId), "Speaker 3", "numbering continues after Speaker 2");
 
@@ -235,6 +354,88 @@ test("meeting: registered voice gets its name, unknown voices get stable Speaker
   assert.match(md, /^# Standup/);
   const json = JSON.parse(await (await fetch(`${B}/api/meetings/${m.id}/export?format=json`)).text());
   assert.equal(json.segments[0].speaker, "Asha");
+});
+
+test("meeting: two people in one piece of speech are split into two lines", async () => {
+  const m = (await j("POST", "/api/meetings", { title: "Back to back" })).data;
+  await j("POST", `/api/meetings/${m.id}/segments?start=1000&end=6000`, turnsPcm([[5, 2.5], [6, 2.5]]));
+  const d = await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.segments.length === 2 && settled(x) && x;
+  });
+  const label = new Map(d.speakers.map((s) => [s.id, s.label]));
+  assert.deepEqual(d.segments.map((s) => label.get(s.speakerId)), ["Speaker 1", "Speaker 2"]);
+  assert.deepEqual(d.segments.map((s) => s.text), ["words from voice 5", "words from voice 6"]);
+  assert.equal(d.segments[0].startMs, 1000);
+  assert.equal(d.segments[1].startMs, 3500, "second line starts where the second voice starts");
+  assert.equal(d.segments[1].endMs, 6000);
+});
+
+test("meeting: transcription gets earlier lines as context and the language hint", async () => {
+  await j("PUT", "/api/settings", { meetingLanguage: "English and Hindi" });
+  const m = (await j("POST", "/api/meetings", { title: "Context" })).data;
+  await j("POST", `/api/meetings/${m.id}/segments?start=0&end=2000`, pcm(7, 2));
+  await until(async () => settled((await j("GET", `/api/meetings/${m.id}`)).data));
+  await j("POST", `/api/meetings/${m.id}/segments?start=3000&end=5000`, pcm(7, 2));
+  await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.segments.length === 2 && settled(x);
+  });
+  assert.equal(geminiCalls.lastTranscribe.language, "English and Hindi");
+  assert.match(geminiCalls.lastTranscribe.context, /Speaker 1: words from voice 7/);
+  await j("PUT", "/api/settings", { meetingLanguage: "" });
+});
+
+test("meeting: after it ends, one voice split in two is merged back", async () => {
+  // very strict matching during the meeting: the same voice gets split into several speakers
+  await j("PUT", "/api/settings", { voiceClusterThreshold: 0.995 });
+  noise = 0.25;
+  const m = (await j("POST", "/api/meetings", { title: "Refine" })).data;
+  for (let i = 0; i < 4; i++) await j("POST", `/api/meetings/${m.id}/segments?start=${i * 3000}&end=${i * 3000 + 2000}`, pcm(8, 2));
+  let d = await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.segments.length === 4 && settled(x) && x;
+  });
+  assert.ok(d.speakers.length > 1, "split during the meeting");
+  await j("PUT", "/api/settings", { voiceClusterThreshold: 0.55 });
+  noise = 0.15;
+  await j("PATCH", `/api/meetings/${m.id}`, { ended: true });
+  d = await until(async () => {
+    const x = (await j("GET", `/api/meetings/${m.id}`)).data;
+    return x.refined && x;
+  });
+  assert.equal(d.speakers.length, 1, "merged after the meeting");
+  assert.equal(new Set(d.segments.map((s) => s.speakerId)).size, 1);
+  assert.equal(d.speakers[0].segments, 4);
+});
+
+test("voice profiles from an older model are flagged and not used", async () => {
+  const p = (await j("POST", "/api/speakers?name=Old&consent=yes", pcm(9, 10))).data;
+  assert.equal(p.outdated, false);
+  const { db } = await import("../db.mjs");
+  db.prepare("UPDATE speaker_profiles SET model = 'old-model' WHERE id = ?").run(p.id);
+  assert.equal((await j("GET", "/api/speakers")).data.find((x) => x.id === p.id).outdated, true);
+  assert.ok(!(await j("POST", "/api/speakers/identify", pcm(9, 3))).data.some((x) => x.name === "Old"));
+  // re-recording replaces the voiceprint in place
+  const r = (await j("POST", `/api/speakers?name=Old&consent=yes&replace=${p.id}`, pcm(9, 10))).data;
+  assert.equal(r.id, p.id);
+  assert.equal(r.outdated, false);
+});
+
+test("web search sources are stored with assistant messages", async () => {
+  const c = (await j("POST", "/api/conversations")).data;
+  await j("POST", `/api/conversations/${c.id}/messages`, {
+    role: "assistant",
+    text: "India won by 5 wickets.",
+    sources: [{ title: "espncricinfo.com", uri: "https://example.com/r/1" }, { title: "bad", uri: "javascript:alert(1)" }],
+    searchQueries: ["india match result"],
+  });
+  const got = (await j("GET", `/api/conversations/${c.id}`)).data;
+  assert.deepEqual(got.messages[0].sources, [{ title: "espncricinfo.com", uri: "https://example.com/r/1" }]);
+  assert.deepEqual(got.messages[0].searchQueries, ["india match result"]);
+  const setup = (await j("GET", "/api/live/setup")).data;
+  assert.equal(setup.webSearch, true);
+  assert.match(setup.systemInstruction, /Google Search/);
 });
 
 test("data can be deleted", async () => {
