@@ -1,0 +1,17 @@
+# dependencies
+/node_modules
+
+# testing
+/coverage
+
+# production
+/build
+
+# local secrets and data (memories, transcripts, voice profiles, model cache)
+.env
+.env.local
+.env.*.local
+/data
+
+.DS_Store
+npm-debug.log*
