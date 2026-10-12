@@ -207,6 +207,18 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
         </div>
       )}
 
+      {live.notice && !error && (
+        <div className="banner banner--warn" role="status">
+          <span className="material-symbols-outlined">travel_explore</span>
+          <span>{live.notice}</span>
+          <span className="banner__actions">
+            <button className="icon-button" onClick={live.clearNotice} aria-label="Dismiss">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </span>
+        </div>
+      )}
+
       <div className="assistant__body">
         {messages.length === 0 ? (
           <div className="assistant__empty">

@@ -40,6 +40,32 @@ export const api = {
   postAudio: <T>(url: string, pcm: ArrayBuffer) => request<T>("POST", url, undefined, pcm),
 };
 
+/**
+ * Downloads a file from the AURA server. Plain <a download> links don't work in dev:
+ * the React dev server doesn't forward page-style requests to the API, so they get the app's HTML.
+ */
+export async function downloadFile(url: string, fallbackName = "export") {
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { Accept: "*/*" } });
+  } catch {
+    throw new Error("Can't reach the AURA server. Start it with `npm run dev` and try again.");
+  }
+  if (!res.ok) throw new Error(`Export failed (${res.status})`);
+  const cd = res.headers.get("Content-Disposition") || "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const plain = /filename="([^"]+)"/i.exec(cd);
+  const name = star ? decodeURIComponent(star[1]) : plain ? plain[1] : fallbackName;
+  const href = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
+}
+
 // ---- shared types ----------------------------------------------------------------
 export type Settings = {
   liveModel: string;

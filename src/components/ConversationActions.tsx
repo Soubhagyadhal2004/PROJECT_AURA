@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import cn from "classnames";
-import { api } from "../lib/api";
+import { api, downloadFile } from "../lib/api";
 import ConfirmButton from "./ConfirmButton";
 
 type Conv = { id: number; title: string; pinned: boolean };
@@ -93,15 +93,24 @@ export function ConversationActions({
         </button>
         {menu && (
           <div className="menu" role="menu">
-            <a role="menuitem" href={`/api/conversations/${conv.id}/export?format=md`} download onClick={() => setMenu(false)}>
-              Markdown (.md)
-            </a>
-            <a role="menuitem" href={`/api/conversations/${conv.id}/export?format=txt`} download onClick={() => setMenu(false)}>
-              Plain text (.txt)
-            </a>
-            <a role="menuitem" href={`/api/conversations/${conv.id}/export?format=json`} download onClick={() => setMenu(false)}>
-              JSON (.json)
-            </a>
+            {(
+              [
+                ["md", "Markdown (.md)"],
+                ["txt", "Plain text (.txt)"],
+                ["json", "JSON (.json)"],
+              ] as const
+            ).map(([fmt, label]) => (
+              <button
+                key={fmt}
+                role="menuitem"
+                onClick={() => {
+                  setMenu(false);
+                  downloadFile(`/api/conversations/${conv.id}/export?format=${fmt}`, `conversation.${fmt}`).catch((e) => alert(e.message));
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         )}
       </div>

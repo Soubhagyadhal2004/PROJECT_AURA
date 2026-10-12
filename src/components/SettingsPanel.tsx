@@ -6,7 +6,11 @@ import ConfirmButton from "./ConfirmButton";
 
 const VOICES = ["Kore", "Puck", "Charon", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr"];
 // Live API models (free tier: no daily request cap). Web search on the free tier may need a 2.5 model.
-const LIVE_MODELS = ["gemini-3.1-flash-live-preview", "gemini-3.8-live", "gemini-2.5-flash-native-audio-preview-12-2025"];
+const LIVE_MODELS = [
+  { id: "gemini-3.1-flash-live-preview", label: "Gemini 3.1 Flash Live (default, no web search on free tier)" },
+  { id: "gemini-2.5-flash-native-audio-preview-12-2025", label: "Gemini 2.5 Flash native audio (web search works on free tier)" },
+  { id: "gemini-3.8-live", label: "Gemini 3.8 Live" },
+];
 
 type Props = { open: boolean; onClose: () => void; health: Health | null; onDataChanged: () => void };
 
@@ -81,12 +85,15 @@ export default function SettingsPanel({ open, onClose, health, onDataChanged }: 
               </label>
               <label className="field">
                 <span>Gemini Live model</span>
-                <input list="live-models" value={s.liveModel} onChange={(e) => update({ liveModel: e.target.value })} />
-                <datalist id="live-models">
+                <select value={s.liveModel} onChange={(e) => update({ liveModel: e.target.value })}>
                   {LIVE_MODELS.map((m) => (
-                    <option key={m} value={m} />
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
                   ))}
-                </datalist>
+                  {!LIVE_MODELS.some((m) => m.id === s.liveModel) && <option value={s.liveModel}>{s.liveModel} (custom)</option>}
+                </select>
+                <small className="muted">Applies to the next voice session. Web search on a Gemini 3 model needs paid search quota; pick the 2.5 model to use it for free.</small>
               </label>
               <label className="check">
                 <input type="checkbox" checked={s.autoMemory} onChange={(e) => update({ autoMemory: e.target.checked })} />

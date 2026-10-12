@@ -217,12 +217,18 @@ code {
   border-radius: var(--radius-m);
   background: var(--raised);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  a {
+  a,
+  button {
     padding: 8px 10px;
+    border: 0;
     border-radius: var(--radius-s);
+    background: transparent;
     color: var(--text);
     text-decoration: none;
+    font: inherit;
     font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
     &:hover,
     &:focus-visible {
       background: var(--line-soft);
@@ -668,6 +674,10 @@ textarea {
 input[type="range"] {
   accent-color: var(--accent);
   width: 100%;
+}
+input[type="radio"] {
+  accent-color: var(--accent);
+  margin: 3px 0 0;
 }
 input[type="checkbox"] {
   accent-color: var(--accent);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cn from "classnames";
-import { api, Health, Meeting, MeetingSpeaker, MeetingSummary, Segment, Settings, SpeakerProfile } from "../lib/api";
+import { api, downloadFile, Health, Meeting, MeetingSpeaker, MeetingSummary, Segment, Settings, SpeakerProfile } from "../lib/api";
 import { clock, dateTime, relativeTime } from "../lib/format";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { Segmenter } from "../lib/segmenter";
@@ -384,15 +384,15 @@ function MeetingDetail({
           aria-label="Meeting title"
         />
         <div className="meeting__actions">
-          <a className="btn btn--ghost btn--small" href={`/api/meetings/${id}/export?format=txt`} download>
+          <button className="btn btn--ghost btn--small" onClick={() => call(downloadFile(`/api/meetings/${id}/export?format=txt`, "meeting.txt"))}>
             <span className="material-symbols-outlined">download</span>Text
-          </a>
-          <a className="btn btn--ghost btn--small" href={`/api/meetings/${id}/export?format=md`} download>
+          </button>
+          <button className="btn btn--ghost btn--small" onClick={() => call(downloadFile(`/api/meetings/${id}/export?format=md`, "meeting.md"))}>
             Markdown
-          </a>
-          <a className="btn btn--ghost btn--small" href={`/api/meetings/${id}/export?format=json`} download>
+          </button>
+          <button className="btn btn--ghost btn--small" onClick={() => call(downloadFile(`/api/meetings/${id}/export?format=json`, "meeting.json"))}>
             JSON
-          </a>
+          </button>
           <ConfirmButton small iconOnly disabled={recordingThis} onConfirm={async () => { await api.del(`/api/meetings/${id}`); onDeleted(); }} label="Delete meeting" confirmLabel="Delete meeting" />
         </div>
       </div>

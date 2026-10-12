@@ -43,6 +43,9 @@ export type UseLiveAPIResults = {
   status: LiveStatus;
   error: string | null;
   clearError: () => void;
+  /** a non-error heads-up, e.g. web search was switched off for this session */
+  notice: string | null;
+  clearNotice: () => void;
   canResume: boolean;
   connect: (opts?: { resume?: boolean; withMic?: boolean }) => Promise<boolean>;
   disconnect: () => void;
@@ -59,6 +62,10 @@ export type UseLiveAPIResults = {
   memoryCount: number | null;
   lastRecall: { query: string; results: Memory[] } | null;
 };
+
+const QUOTA_RE = /quota|exceeded|resource.?exhausted|rate.?limit/i;
+const SEARCH_OFF_NOTICE =
+  "Web search was rejected for this model (its search quota is used up or not available on your plan), so AURA switched it off and reconnected. Voice still works. For search, pick a different Live model in Settings, such as gemini-2.5-flash-native-audio-preview-12-2025, then reload the page.";
 
 type SetupResponse = { model: string; voice: string; systemInstruction: string; memoryCount: number; webSearch: boolean };
 
@@ -90,6 +97,11 @@ export function useLiveAPI(): UseLiveAPIResults {
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
   const [lastRecall, setLastRecall] = useState<UseLiveAPIResults["lastRecall"]>(null);
   const [canResume, setCanResume] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  /** whether the running session was started with Google Search */
+  const searchOn = useRef(false);
+  /** set once Google rejected search for quota reasons; search stays off until the page is reloaded */
+  const searchBlocked = useRef(false);
 
   const convIdRef = useRef<number | null>(null);
   const userClosing = useRef(false);
@@ -205,10 +217,20 @@ export function useLiveAPI(): UseLiveAPIResults {
   useEffect(() => {
     const onOpen = () => setStatus("connected");
     const onClose = (e: CloseEvent) => {
+      const mic = recorder.recording;
       setStatus("disconnected");
       setMicOnState(false);
       finalize(pendingUser);
       finalize(pendingAssistant);
+      if (!userClosing.current && searchOn.current && !searchBlocked.current && QUOTA_RE.test(e?.reason || "")) {
+        // Google refused search (e.g. no free-tier search quota for this model): carry on without it
+        searchBlocked.current = true;
+        searchOn.current = false;
+        setNotice(SEARCH_OFF_NOTICE);
+        const handle = Boolean(client.resumptionHandle);
+        setTimeout(() => connectRef.current?.({ resume: handle, withMic: mic }), 0);
+        return;
+      }
       if (!userClosing.current) {
         const reason = e?.reason ? `: ${e.reason}` : "";
         setError(`The voice session ended unexpectedly${reason}.`);
@@ -321,7 +343,7 @@ export function useLiveAPI(): UseLiveAPIResults {
 
   // ---- actions -------------------------------------------------------------------------------------
   const connect = useCallback(
-    async ({ resume = false, withMic = true }: { resume?: boolean; withMic?: boolean } = {}) => {
+    async ({ resume = false, withMic = true }: { resume?: boolean; withMic?: boolean } = {}): Promise<boolean> => {
       if (client.status !== "disconnected") return true;
       setError(null);
       setCanResume(false);
@@ -334,13 +356,15 @@ export function useLiveAPI(): UseLiveAPIResults {
         setMemoryCount(setup.memoryCount);
         const handle = resume ? client.resumptionHandle : null;
         if (!resume) client.resumptionHandle = null;
+        const useSearch = setup.webSearch && !searchBlocked.current;
+        searchOn.current = useSearch;
         const config: LiveConnectConfig = {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: setup.voice } } },
           systemInstruction: { parts: [{ text: setup.systemInstruction }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          tools: setup.webSearch
+          tools: useSearch
             ? [{ googleSearch: {} }, { functionDeclarations: [recallDeclaration] }]
             : [{ functionDeclarations: [recallDeclaration] }],
           sessionResumption: handle ? { handle } : {},
@@ -352,6 +376,12 @@ export function useLiveAPI(): UseLiveAPIResults {
         return true;
       } catch (e: any) {
         setStatus("disconnected");
+        if (searchOn.current && !searchBlocked.current && QUOTA_RE.test(String(e?.message || ""))) {
+          searchBlocked.current = true;
+          searchOn.current = false;
+          setNotice(SEARCH_OFF_NOTICE);
+          return connectRef.current ? connectRef.current({ resume, withMic }) : false;
+        }
         setError(`Couldn't start the voice session. ${e.message}`);
         return false;
       }
@@ -434,11 +464,14 @@ export function useLiveAPI(): UseLiveAPIResults {
 
   const setMicOn = useCallback((on: boolean) => setMicOnState(on), []);
   const clearError = useCallback(() => setError(null), []);
+  const clearNotice = useCallback(() => setNotice(null), []);
 
   return {
     status,
     error,
     clearError,
+    notice,
+    clearNotice,
     canResume,
     connect,
     disconnect,
