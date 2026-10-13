@@ -24,7 +24,7 @@ import { AudioStreamer } from "../lib/audio-streamer";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { audioContext } from "../lib/utils";
 import VolMeterWorket from "../lib/worklets/vol-meter";
-import { api, Memory, Message, WebSource } from "../lib/api";
+import { api, DOCUMENT_LIMIT_MB, DocumentInfo, Memory, Message, WebSource } from "../lib/api";
 
 const recallDeclaration: FunctionDeclaration = {
   name: "recall_memories",
@@ -66,7 +66,28 @@ const getMeetingDeclaration: FunctionDeclaration = {
   },
 };
 
-const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetingDeclaration];
+const askDocumentDeclaration: FunctionDeclaration = {
+  name: "ask_document",
+  description:
+    "Answer a question from the documents the user added to this conversation (PDF, Word, slides, spreadsheets, text, images). " +
+    "Pass document_id to ask about one document, or leave it out to look across all of them. Returns the answer, whether it was found, and short quotes with page or section.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      question: { type: Type.STRING, description: "The question, phrased fully (e.g. 'What is the monthly rent and when is it due?')." },
+      document_id: { type: Type.INTEGER, description: "Optional: the document to ask about." },
+    },
+    required: ["question"],
+  },
+};
+
+const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetingDeclaration, askDocumentDeclaration];
+
+type ToolContext = {
+  conversationId: number | null;
+  onRecall: (query: string, results: Memory[]) => void;
+  onDocumentLookup: (question: string, names: string[]) => void;
+};
 
 /** YYYY-MM-DD in the browser's time zone -> ms at the start of that day (or the end, with endOfDay). */
 function localDay(s: unknown, endOfDay = false): number | undefined {
@@ -77,11 +98,11 @@ function localDay(s: unknown, endOfDay = false): number | undefined {
 }
 
 /** Run one of AURA's own tools for the Live model. */
-async function runTool(name: string | undefined, args: any, onRecall: (query: string, results: Memory[]) => void): Promise<Record<string, unknown>> {
+async function runTool(name: string | undefined, args: any, ctx: ToolContext): Promise<Record<string, unknown>> {
   if (name === "recall_memories") {
     const query = String(args?.query || "");
     const results = await api.get<Memory[]>(`/api/memories/search?q=${encodeURIComponent(query)}&k=6`);
-    onRecall(query, results);
+    ctx.onRecall(query, results);
     return {
       memories: results.map((r) => ({
         fact: r.content,
@@ -106,6 +127,16 @@ async function runTool(name: string | undefined, args: any, onRecall: (query: st
           : undefined
         : "No meetings were recorded in that period.",
     };
+  }
+  if (name === "ask_document") {
+    if (!ctx.conversationId) return { found: false, answer: "No documents have been added to this conversation." };
+    const question = String(args?.question || "");
+    const r = await api.post<Record<string, unknown> & { documents?: { name: string }[] }>(
+      `/api/conversations/${ctx.conversationId}/documents/ask`,
+      { question, documentId: args?.document_id ?? undefined }
+    );
+    ctx.onDocumentLookup(question, (r.documents || []).map((d) => d.name));
+    return r;
   }
   if (name === "get_meeting") {
     return api.get<Record<string, unknown>>(`/api/meetings/${Number(args?.meeting_id)}/brief`);
@@ -135,6 +166,13 @@ export type UseLiveAPIResults = {
   continueConversation: (id: number) => Promise<void>;
   memoryCount: number | null;
   lastRecall: { query: string; results: Memory[] } | null;
+  /** documents added to the current conversation */
+  documents: DocumentInfo[];
+  /** add files; resolves with an error per file that couldn't be added */
+  attachFiles: (files: File[]) => Promise<{ name: string; error: string }[]>;
+  removeDocument: (id: number) => Promise<void>;
+  retryDocument: (id: number) => Promise<void>;
+  lastDocumentLookup: { question: string; names: string[] } | null;
 };
 
 const QUOTA_RE = /quota|exceeded|resource.?exhausted|rate.?limit/i;
@@ -172,6 +210,12 @@ export function useLiveAPI(): UseLiveAPIResults {
   const [lastRecall, setLastRecall] = useState<UseLiveAPIResults["lastRecall"]>(null);
   const [canResume, setCanResume] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [lastDocumentLookup, setLastDocumentLookup] = useState<UseLiveAPIResults["lastDocumentLookup"]>(null);
+  // documents to tell the running session about once they have been read
+  const announce = useRef(new Set<number>());
+  const documentsRef = useRef<DocumentInfo[]>([]);
+  documentsRef.current = documents;
   /** whether the running session was started with Google Search */
   const searchOn = useRef(false);
   /** set once Google rejected search for quota reasons; search stays off until the page is reloaded */
@@ -196,12 +240,23 @@ export function useLiveAPI(): UseLiveAPIResults {
   }, []);
 
   // ---- persistence -------------------------------------------------------------------------
+  // one conversation is created even when a message and a document need it at the same time
+  const creating = useRef<Promise<number> | null>(null);
   const ensureConversation = useCallback(async () => {
     if (convIdRef.current) return convIdRef.current;
-    const c = await api.post<{ id: number }>("/api/conversations");
-    convIdRef.current = c.id;
-    setConversationId(c.id);
-    return c.id;
+    if (!creating.current) {
+      creating.current = api
+        .post<{ id: number }>("/api/conversations")
+        .then((c) => {
+          convIdRef.current = c.id;
+          setConversationId(c.id);
+          return c.id;
+        })
+        .finally(() => {
+          creating.current = null;
+        });
+    }
+    return creating.current;
   }, []);
 
   const persist = useCallback(
@@ -346,7 +401,11 @@ export function useLiveAPI(): UseLiveAPIResults {
       const responses = await Promise.all(
         (tc.functionCalls || []).map(async (fc) => {
           try {
-            const response = await runTool(fc.name, fc.args, (query, results) => setLastRecall({ query, results }));
+            const response = await runTool(fc.name, fc.args, {
+              conversationId: convIdRef.current,
+              onRecall: (query, results) => setLastRecall({ query, results }),
+              onDocumentLookup: (question, names) => setLastDocumentLookup({ question, names }),
+            });
             return { id: fc.id, name: fc.name, response };
           } catch (e: any) {
             return { id: fc.id, name: fc.name, response: { error: e.message } };
@@ -431,6 +490,8 @@ export function useLiveAPI(): UseLiveAPIResults {
           contextWindowCompression: { slidingWindow: {} },
         };
         await client.connect(setup.model, config);
+        // the new session's instructions already describe documents that have been read
+        if (!resume) for (const d of documentsRef.current) if (d.status !== "analysing") announce.current.delete(d.id);
         setStatus("connected");
         if (withMic) setMicOnState(true);
         return true;
@@ -504,11 +565,14 @@ export function useLiveAPI(): UseLiveAPIResults {
     setCanResume(false);
     setError(null);
     setLastRecall(null);
+    setDocuments([]);
+    setLastDocumentLookup(null);
+    announce.current.clear();
   }, [client, disconnect, publish]);
 
   const continueConversation = useCallback(
     async (id: number) => {
-      const c = await api.get<{ id: number; messages: Message[] }>(`/api/conversations/${id}`);
+      const c = await api.get<{ id: number; messages: Message[]; documents?: DocumentInfo[] }>(`/api/conversations/${id}`);
       if (client.status !== "disconnected") disconnect();
       client.resumptionHandle = null;
       convIdRef.current = c.id;
@@ -518,9 +582,106 @@ export function useLiveAPI(): UseLiveAPIResults {
       setCanResume(false);
       setError(null);
       setLastRecall(null);
+      setDocuments(c.documents || []);
+      setLastDocumentLookup(null);
+      announce.current.clear();
     },
     [client, disconnect, publish]
   );
+
+  // ---- documents ---------------------------------------------------------------------------------
+  const attachFiles = useCallback(
+    async (files: File[]) => {
+      const failed: { name: string; error: string }[] = [];
+      if (!files.length) return failed;
+      let convId: number;
+      try {
+        convId = await ensureConversation();
+      } catch (e: any) {
+        return files.map((f) => ({ name: f.name, error: e.message }));
+      }
+      for (const f of files) {
+        const inline = /\.(pdf|png|jpe?g|webp|hei[cf])$/i.test(f.name);
+        const limit = inline ? DOCUMENT_LIMIT_MB.inline : DOCUMENT_LIMIT_MB.other;
+        if (f.size > limit * 1048576) {
+          failed.push({ name: f.name, error: `It's ${(f.size / 1048576).toFixed(1)} MB; the limit for this type is ${limit} MB.` });
+          continue;
+        }
+        try {
+          const r = await api.upload<{ document: DocumentInfo; message: Message }>(
+            `/api/conversations/${convId}/documents?name=${encodeURIComponent(f.name)}`,
+            f
+          );
+          finalize(pendingUser);
+          finalize(pendingAssistant);
+          upsert(r.message);
+          setDocuments((d) => [...d, r.document]);
+          announce.current.add(r.document.id);
+        } catch (e: any) {
+          failed.push({ name: f.name, error: e.message });
+        }
+      }
+      return failed;
+    },
+    [ensureConversation, finalize, upsert]
+  );
+
+  const removeDocument = useCallback(
+    async (id: number) => {
+      const doc = documents.find((d) => d.id === id);
+      await api.del(`/api/documents/${id}`);
+      setDocuments((d) => d.filter((x) => x.id !== id));
+      announce.current.delete(id);
+      if (doc && client.status === "connected") {
+        client.send([{ text: `[AURA app] The user removed document_id ${id} ("${doc.name}"); it is no longer available.` }], false);
+      }
+    },
+    [client, documents]
+  );
+
+  const retryDocument = useCallback(async (id: number) => {
+    const d = await api.post<DocumentInfo>(`/api/documents/${id}/retry`);
+    setDocuments((list) => list.map((x) => (x.id === id ? d : x)));
+    announce.current.add(id);
+  }, []);
+
+  // follow documents that are still being read
+  const reading = documents.filter((d) => d.status === "analysing").map((d) => d.id).join(",");
+  useEffect(() => {
+    if (!reading) return;
+    const t = setInterval(async () => {
+      for (const id of reading.split(",").map(Number)) {
+        try {
+          const d = await api.get<DocumentInfo>(`/api/documents/${id}`);
+          if (d.status !== "analysing") setDocuments((list) => list.map((x) => (x.id === id ? d : x)));
+        } catch {}
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [reading]);
+
+  // tell a running session about a document once it has been read, so it can give an overview
+  useEffect(() => {
+    if (status !== "connected") return;
+    for (const d of documents) {
+      if (!announce.current.has(d.id) || d.status === "analysing") continue;
+      announce.current.delete(d.id);
+      if (d.status !== "ready" || !d.analysis) continue;
+      const a = d.analysis;
+      client.send(
+        [
+          {
+            text:
+              `[AURA app] The user added a document: document_id ${d.id}, "${d.name}" (${d.label}${a.pages ? `, ${a.pages} pages` : ""}). ` +
+              `Overview: ${a.docType ? a.docType + ". " : ""}${a.overview}` +
+              (d.truncated ? " (It is long, so only its first part can be read.)" : "") +
+              ` Say in one or two short sentences what it is and ask what they'd like to know. Use ask_document for questions about it.`,
+          },
+        ],
+        true
+      );
+    }
+  }, [documents, status, client]);
 
   const setMicOn = useCallback((on: boolean) => setMicOnState(on), []);
   const clearError = useCallback(() => setError(null), []);
@@ -546,5 +707,10 @@ export function useLiveAPI(): UseLiveAPIResults {
     continueConversation,
     memoryCount,
     lastRecall,
+    documents,
+    attachFiles,
+    removeDocument,
+    retryDocument,
+    lastDocumentLookup,
   };
 }

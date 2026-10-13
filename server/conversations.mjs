@@ -12,14 +12,15 @@ export function listConversations() {
     .prepare(
       `SELECT c.id, c.title, c.started_at, c.updated_at, c.pinned,
               (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS n,
-              (SELECT text FROM messages m WHERE m.conversation_id = c.id AND role = 'user' ORDER BY id LIMIT 1) AS first_user
+              (SELECT text FROM messages m WHERE m.conversation_id = c.id AND role = 'user' AND modality != 'document' ORDER BY id LIMIT 1) AS first_user,
+              (SELECT name FROM documents d WHERE d.conversation_id = c.id ORDER BY id LIMIT 1) AS first_doc
        FROM conversations c ORDER BY c.pinned DESC, c.updated_at DESC`
     )
     .all()
     .filter((c) => c.n > 0)
     .map((c) => ({
       id: c.id,
-      title: c.title || (c.first_user ? c.first_user.slice(0, 60) : "Conversation"),
+      title: c.title || (c.first_user || c.first_doc || "Conversation").slice(0, 60),
       startedAt: c.started_at,
       updatedAt: c.updated_at,
       messageCount: c.n,
@@ -35,10 +36,11 @@ export function getConversation(id) {
     .prepare("SELECT id, role, modality, text, meta, created_at FROM messages WHERE conversation_id = ? ORDER BY id")
     .all(id)
     .map((m) => ({ id: m.id, role: m.role, modality: m.modality, text: m.text, createdAt: m.created_at, ...parseMeta(m.meta) }));
-  const firstUser = messages.find((m) => m.role === "user")?.text;
+  const firstUser = messages.find((m) => m.role === "user" && m.modality !== "document")?.text;
+  const firstDoc = messages.find((m) => m.modality === "document")?.document?.name;
   return {
     id: c.id,
-    title: c.title || (firstUser ? firstUser.slice(0, 60) : "Conversation"),
+    title: c.title || (firstUser || firstDoc || "Conversation").slice(0, 60),
     renamed: !!c.title,
     pinned: !!c.pinned,
     startedAt: c.started_at,

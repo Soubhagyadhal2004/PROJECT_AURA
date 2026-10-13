@@ -1,11 +1,12 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import cn from "classnames";
 import { useLiveAPIContext } from "../contexts/LiveAPIContext";
-import { api, Conversation, Message } from "../lib/api";
+import { api, Conversation, DocumentInfo, Message } from "../lib/api";
 import { dateTime } from "../lib/format";
 import Orb from "../components/Orb";
 import MemoryReview from "../components/MemoryReview";
 import { ConversationActions, ConversationTitle } from "../components/ConversationActions";
+import { AttachMenu, DocumentCard } from "../components/Documents";
 
 type Props = {
   historyId: number | null;
@@ -38,14 +39,37 @@ function useConversationMeta(id: number | null, version: number, extra: unknown 
   return meta;
 }
 
-function MessageList({ messages, live }: { messages: Message[]; live?: boolean }) {
+function MessageList({
+  messages,
+  live,
+  documents = [],
+  onAsk,
+  onRetry,
+}: {
+  messages: Message[];
+  live?: boolean;
+  documents?: DocumentInfo[];
+  onAsk?: (question: string) => void;
+  onRetry?: (id: number) => void;
+}) {
   const end = useRef<HTMLDivElement>(null);
+  const docStates = documents.map((d) => d.status).join();
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
-  }, [messages]);
+  }, [messages, docStates]);
   return (
     <div className="messages" aria-live={live ? "polite" : undefined}>
-      {messages.map((m, i) => (
+      {messages.map((m, i) =>
+        m.modality === "document" && m.document ? (
+          <div key={m.id ?? `${i}-${m.createdAt}`} className="msg msg--user msg--document">
+            <DocumentCard
+              name={m.document.name}
+              doc={documents.find((d) => d.id === m.document!.id)}
+              onAsk={onAsk}
+              onRetry={onRetry ? () => onRetry(m.document!.id) : undefined}
+            />
+          </div>
+        ) : (
         <div key={m.id ?? `${i}-${m.createdAt}`} className={cn("msg", `msg--${m.role}`, { "msg--pending": m.pending })}>
           <div className="msg__bubble">{m.text}</div>
           {m.role === "assistant" && (m.sources?.length || m.searchQueries?.length) ? <WebSources m={m} /> : null}
@@ -59,7 +83,8 @@ function MessageList({ messages, live }: { messages: Message[]; live?: boolean }
             {m.pending && <span className="msg__typing">…</span>}
           </div>
         </div>
-      ))}
+        )
+      )}
       <div ref={end} />
     </div>
   );
@@ -115,10 +140,14 @@ function WebSources({ m }: { m: Message }) {
 function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: () => void; version: number; memoryReviews: number }) {
   const live = useLiveAPIContext();
   const { status, error, micOn, micVolume, outVolume, messages } = live;
-  const firstUserText = messages.find((m) => m.role === "user" && !m.pending)?.text;
-  const meta = useConversationMeta(live.conversationId, version, firstUserText);
+  // refresh the title when the first message or a document arrives
+  const firstUserText = messages.find((m) => m.role === "user" && !m.pending && m.modality !== "document")?.text;
+  const meta = useConversationMeta(live.conversationId, version, `${firstUserText ?? ""}|${live.documents.length}`);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [dropErrors, setDropErrors] = useState<{ name: string; error: string }[]>([]);
+  const dragDepth = useRef(0);
 
   const connected = status === "connected";
   const speaking = connected && outVolume > 0.01;
@@ -136,6 +165,37 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
     } finally {
       setSending(false);
     }
+  };
+
+  const ask = async (q: string) => {
+    if (sending) return;
+    setSending(true);
+    try {
+      await live.sendText(q);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // drop files anywhere in the conversation to add them
+  const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes("Files");
+  const onDragEnter = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current++;
+    setDragging(true);
+  };
+  const onDragLeave = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (!dragDepth.current) setDragging(false);
+  };
+  const onDrop = async (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    setDropErrors(await live.attachFiles(Array.from(e.dataTransfer.files)));
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -157,7 +217,19 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
             : "Microphone muted — type or unmute to talk";
 
   return (
-    <section className="view assistant">
+    <section
+      className="view assistant"
+      onDragEnter={onDragEnter}
+      onDragOver={(e) => hasFiles(e) && e.preventDefault()}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dragging && (
+        <div className="dropzone" aria-hidden="true">
+          <span className="material-symbols-outlined">upload_file</span>
+          Drop to add to this conversation
+        </div>
+      )}
       <header className="view__header">
         <div className="view__title">
           {meta ? <ConversationTitle conv={meta} onChanged={onChanged} /> : <h1>Assistant</h1>}
@@ -207,6 +279,24 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
         </div>
       )}
 
+      {dropErrors.length > 0 && (
+        <div className="banner banner--error" role="alert">
+          <span className="material-symbols-outlined">error</span>
+          <span>
+            {dropErrors.map((e) => (
+              <span key={e.name} className="banner__line">
+                <strong>{e.name}:</strong> {e.error}
+              </span>
+            ))}
+          </span>
+          <span className="banner__actions">
+            <button className="icon-button" onClick={() => setDropErrors([])} aria-label="Dismiss">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </span>
+        </div>
+      )}
+
       {live.notice && !error && (
         <div className="banner banner--warn" role="status">
           <span className="material-symbols-outlined">travel_explore</span>
@@ -229,15 +319,25 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
                 ? "Ask anything, or tell me something worth remembering."
                 : "Start a voice session or type a message below. Tell me about yourself and I'll remember it next time."}
             </p>
+            <p className="assistant__tip">
+              <span className="material-symbols-outlined" aria-hidden="true">attach_file</span>
+              Add a document with the paperclip, or drop it here, then ask about it.
+            </p>
           </div>
         ) : (
-          <MessageList messages={messages} live />
+          <MessageList messages={messages} live documents={live.documents} onAsk={ask} onRetry={(id) => live.retryDocument(id)} />
         )}
         {live.lastRecall && (
           <div className="recall-note" title={live.lastRecall.results.map((r) => r.content).join("\n")}>
             <span className="material-symbols-outlined">neurology</span>
             Looked up “{live.lastRecall.query}” in memory — {live.lastRecall.results.length} match
             {live.lastRecall.results.length === 1 ? "" : "es"}
+          </div>
+        )}
+        {live.lastDocumentLookup && (
+          <div className="recall-note recall-note--doc" title={live.lastDocumentLookup.question}>
+            <span className="material-symbols-outlined">plagiarism</span>
+            Looked in {live.lastDocumentLookup.names.length === 1 ? `“${live.lastDocumentLookup.names[0]}”` : `${live.lastDocumentLookup.names.length} documents`}
           </div>
         )}
       </div>
@@ -274,6 +374,7 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
           </div>
         </div>
         <form className="composer__text" onSubmit={submit}>
+          <AttachMenu documents={live.documents} onAdd={live.attachFiles} onRemove={live.removeDocument} />
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -335,7 +436,7 @@ function PastConversation({ id, onClose, onChanged, version }: { id: number; onC
         </div>
       </header>
       {error && <div className="banner banner--error">{error}</div>}
-      <div className="assistant__body">{conv && <MessageList messages={conv.messages} />}</div>
+      <div className="assistant__body">{conv && <MessageList messages={conv.messages} documents={conv.documents} />}</div>
     </section>
   );
 }

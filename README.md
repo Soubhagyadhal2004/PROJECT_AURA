@@ -60,7 +60,26 @@ browser (React, existing CRA stack)               local server (server/, plain N
   search terms and numbered source links; the sources are saved with the conversation. Turn it off in
   Settings ("Let AURA search the web"). Search runs inside Gemini; nothing else is called.
 
-### Memory (`server/memory.mjs`)
+### Documents (`server/documents.mjs`, `server/doc-text.mjs`)
+
+Use the paperclip in the message box (or drop files into the chat) to add documents to the current
+conversation: PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), CSV/text/Markdown/code and images
+(PNG, JPEG, WebP, HEIC). Old .doc/.ppt/.xls files have to be saved in the new format first.
+
+- Files are stored in `data/documents/` and deleted with the conversation (or with "Delete everything").
+- PDFs and images are sent to Gemini as they are, so scanned pages and photos of text work (limit 14 MB).
+  Word, PowerPoint and Excel text is extracted locally, with no extra dependencies (limit 30 MB; only
+  the first ~300,000 characters are used).
+- When a document is added, Gemini (the text model) writes a short overview, key points and three
+  suggested questions, shown on a card in the chat. In a running voice session AURA also says in a
+  sentence or two what it is.
+- Questions go through the assistant's `ask_document` tool: the text model answers from the document
+  only, says when the answer isn't there, and gives short quotes with page or section.
+- Cost: one request when a document is added and one per question, from the text model's daily quota
+  (`gemini-3.5-flash-lite`: 500/day on the free tier). Every question re-sends the document, so very
+  large documents use a lot of tokens.
+
+
 
 - **Extraction**: a few seconds after each reply (and when a session ends), new messages are sent to
   Gemini (`GEMINI_TEXT_MODEL`, default `gemini-3.5-flash-lite`, chosen for its larger free daily quota) together with the related existing
@@ -168,6 +187,9 @@ not model quality.
 - Minutes, memory-from-meetings and the meeting lookup tools were tested with a fake Gemini only; the
   quality of real minutes and whether the Live model calls the meeting tools reliably are unverified.
 - Only one microphone user at a time: starting a meeting ends the current voice session.
+- Documents: tested with a fake Gemini; answer quality on real files is unverified. Excel dates may appear
+  as serial numbers, charts and embedded images in Office files are not read, and password-protected
+  files can't be opened.
 - Single local user, no accounts. The server listens on 127.0.0.1 only.
 
 ## Project layout
@@ -177,6 +199,7 @@ server/            local API (node:http + node:sqlite), Gemini calls, local mode
   index.mjs        routes          memory.mjs    extraction / conflicts / search
   meetings.mjs     diarization, transcription worker, export
   meeting-notes.mjs  minutes, memory from meetings, date/topic lookup for the assistant
+  documents.mjs    documents in conversations   doc-text.mjs  text from Office and text files
   models.mjs       transformers.js embeddings   gemini.mjs   tokens, JSON + transcription calls
 src/
   hooks/use-live-api.ts      Live session, transcripts, persistence, recall tool

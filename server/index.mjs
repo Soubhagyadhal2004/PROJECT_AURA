@@ -12,6 +12,8 @@ import * as conv from "./conversations.mjs";
 import * as mem from "./memory.mjs";
 import * as meet from "./meetings.mjs";
 import * as notes from "./meeting-notes.mjs";
+import * as docs from "./documents.mjs";
+import { ACCEPT } from "./doc-text.mjs";
 
 // ---- tiny router ---------------------------------------------------------------------
 const routes = [];
@@ -98,22 +100,30 @@ app.get("/api/live/setup", h((req) => {
     `The user records meetings with AURA's Meeting Mode. When they ask about a meeting (by date, a weekday like "last Wednesday", "yesterday", a topic or a person), call find_meetings with explicit dates you work out from the current date above, then call get_meeting for the one(s) that fit before answering questions about what was said, decided or assigned.`,
     `Base meeting answers only on what those tools return. If no meeting matches, say so. Speaker names in transcripts come from voice recognition and can be wrong.`,
     ``,
+    `The user can add documents (PDF, Word, PowerPoint, Excel, text, images) to the conversation. For any question about a document's contents, call ask_document (with document_id, or without it to look across all of them) and answer from its result; you cannot see the documents yourself. If it says the answer isn't in the document, tell the user so. Mention page or section when the result gives it. Notes in square brackets starting with "[AURA app]" come from the app, not from the user.`,
+    ``,
     s.webSearch
       ? `You can search the web with Google Search. Use it for news, current events, prices, scores, weather, schedules and anything else that may have changed recently or that you are unsure about. Mention the source briefly when you use search results. Do not use web search for questions about the user; use memory for those.`
       : `You cannot browse the web in this session. If the user asks about recent news or live information, say that web search is turned off in Settings.`,
   ].filter((l) => l !== null).join("\n");
   const convId = Number(req.query.conversation) || null;
   const earlier = convId ? conv.historyForPrompt(convId) : "";
-  const full = earlier
+  const docLines = convId ? docs.documentsForPrompt(convId) : [];
+  let full = earlier
     ? `${systemInstruction}\n\nThe user is continuing an earlier conversation. What was said before (oldest first):\n${earlier}\n\nPick up naturally from there; don't repeat or summarise it unless asked.`
     : systemInstruction;
+  if (docLines.length) full += `\n\nDocuments the user added to this conversation:\n${docLines.join("\n")}`;
   return { model: s.liveModel, voice: s.voice, systemInstruction: full, memoryCount: memories.length, webSearch: !!s.webSearch };
 }));
 
 // ---- conversations ----------------------------------------------------------------------
 app.get("/api/conversations", h(() => conv.listConversations()));
 app.post("/api/conversations", h(() => conv.createConversation()));
-app.get("/api/conversations/:id", h((req) => conv.getConversation(id(req)) || (() => { throw notFound(); })()));
+app.get("/api/conversations/:id", h((req) => {
+  const c = conv.getConversation(id(req));
+  if (!c) throw notFound();
+  return { ...c, documents: docs.listDocuments(c.id) };
+}));
 app.post("/api/conversations/:id/messages", h((req) => {
   const { role, text, modality, sources, searchQueries } = req.body || {};
   if (!["user", "assistant"].includes(role) || !String(text || "").trim()) throw bad("role and text required");
@@ -133,8 +143,40 @@ app.get("/api/conversations/:id/export", (req, res) => {
   if (!out) throw notFound();
   sendDownload(res, out);
 });
-app.delete("/api/conversations/:id", h((req) => ({ deleted: conv.deleteConversation(id(req)) })));
-app.delete("/api/conversations", h(() => ({ deleted: conv.deleteAllConversations() })));
+app.delete("/api/conversations/:id", h((req) => {
+  const deleted = conv.deleteConversation(id(req));
+  docs.cleanUpFiles(); // the conversation's documents went with it
+  return { deleted };
+}));
+app.delete("/api/conversations", h(() => {
+  const deleted = conv.deleteAllConversations();
+  docs.cleanUpFiles();
+  return { deleted };
+}));
+
+// ---- documents -----------------------------------------------------------------------------------
+app.get("/api/documents/types", h(() => ({ accept: ACCEPT, maxInlineMB: docs.MAX_INLINE_BYTES / 1048576, maxFileMB: docs.MAX_FILE_BYTES / 1048576 })));
+app.get("/api/conversations/:id/documents", h((req) => docs.listDocuments(id(req))));
+app.post("/api/conversations/:id/documents", raw, h((req) => {
+  if (!conv.getConversation(id(req))) throw notFound();
+  return docs.addDocument(id(req), { name: req.query.name, body: req.body });
+}));
+app.post("/api/conversations/:id/documents/ask", h((req) => {
+  const { question, documentId } = req.body || {};
+  return docs.askDocuments(id(req), { question, documentId });
+}));
+app.get("/api/documents/:id", h((req) => docs.getDocument(id(req)) || (() => { throw notFound(); })()));
+app.post("/api/documents/:id/retry", h((req) => docs.retryDocument(id(req))));
+app.delete("/api/documents/:id", h((req) => ({ deleted: docs.deleteDocument(id(req)) })));
+app.get("/api/documents/:id/file", (req, res) => {
+  const file = docs.documentFile(id(req));
+  if (!file) throw notFound();
+  res.writeHead(200, {
+    "Content-Type": "application/octet-stream",
+    "Content-Disposition": `attachment; filename="${file.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+  });
+  fs.createReadStream(file.path).pipe(res);
+});
 
 // ---- memory --------------------------------------------------------------------------------
 app.get("/api/memories", h(() => mem.listMemories()));
@@ -218,6 +260,7 @@ app.delete("/api/data", h(() => ({
   conversations: conv.deleteAllConversations(),
   meetings: meet.deleteAllMeetings(),
   profiles: meet.listProfiles().map((p) => meet.deleteProfile(p.id)).length,
+  documents: docs.cleanUpFiles(),
 })));
 
 // ---- static production build (npm run build && npm run serve) -------------------------------------
@@ -277,6 +320,7 @@ export function start(port = PORT) {
       if (process.env.REACT_APP_GEMINI_API_KEY)
         console.warn("[aura] REACT_APP_GEMINI_API_KEY is set: rename it to GEMINI_API_KEY so the key is never bundled into the web app.");
       meet.resumePending();
+      docs.resumeDocuments();
       if (process.env.AURA_NO_WARMUP !== "1") warmUp();
       resolve(server);
     });

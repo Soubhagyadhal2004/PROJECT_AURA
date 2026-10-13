@@ -69,12 +69,20 @@ const geminiCalls = { json: [], transcribe: 0 };
 let nextOps = [];
 let nextMeetingOps = []; // what the meeting memory extractor returns
 let nextMinutes = null; // what the minutes writer returns
+let docFail = false; // make the document reader fail
 mock.module(new URL("../gemini.mjs", import.meta.url).href, {
   namedExports: {
     hasKey: () => true,
     createLiveToken: async () => ({ token: "auth_tokens/fake", expiresAt: Date.now() + 1000 }),
     generateJSON: async (args) => {
       geminiCalls.json.push(args);
+      if (/You read documents/.test(args.system || "")) {
+        if (docFail) throw new Error("model unavailable");
+        return { title: "Rental agreement", doc_type: "contract", overview: "A one-year rental agreement for a flat in Pune.", key_points: ["Rent is 25,000 a month"], suggested_questions: ["When does it end?"], pages: 2 };
+      }
+      if (/You answer questions about the user's documents/.test(args.system || "")) {
+        return { answer: "The rent is 25,000 rupees a month.", found: true, quotes: [{ text: "Monthly rent: 25,000", where: "page 1" }] };
+      }
       if (args.schema?.properties?.summary) return nextMinutes;
       if (/transcript of a meeting/.test(args.system || "")) return { operations: nextMeetingOps };
       return { operations: nextOps };
@@ -563,6 +571,158 @@ test("meetings can be found by date range and topic", async () => {
   const setup = (await j("GET", "/api/live/setup")).data;
   assert.match(setup.systemInstruction, /Right now it is \w+day,? \d+ \w+ \d{4}/);
   assert.match(setup.systemInstruction, /find_meetings/);
+});
+
+
+// ---- documents ------------------------------------------------------------------------------
+// a tiny ZIP writer (deflate) so the tests can build real .docx/.pptx/.xlsx files
+const zlib = await import("node:zlib");
+function makeZip(files) {
+  const locals = [], centrals = [];
+  let off = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = Buffer.from(content, "utf8");
+    const comp = zlib.deflateRawSync(data);
+    const crc = zlib.crc32(data);
+    const n = Buffer.from(name);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(8, 8);
+    lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(comp.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(n.length, 26);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(8, 10);
+    ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(comp.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(n.length, 28); ch.writeUInt32LE(off, 42);
+    locals.push(lh, n, comp);
+    centrals.push(ch, n);
+    off += 30 + n.length + comp.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(centrals.length / 2, 8); end.writeUInt16LE(centrals.length / 2, 10);
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(off, 16);
+  return Buffer.concat([...locals, cd, end]);
+}
+
+test("documents: text comes out of Word, PowerPoint, Excel and CSV files", async () => {
+  const { extractText, classify } = await import("../doc-text.mjs");
+  const docx = makeZip({ "word/document.xml": `<w:document><w:body><w:p><w:r><w:t>Monthly rent:</w:t></w:r><w:r><w:tab/><w:t>25,000 &amp; deposit</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:t>Start</w:t></w:p></w:tc><w:tc><w:p><w:t>1 Nov</w:t></w:p></w:tc></w:tr></w:tbl></w:body></w:document>` });
+  const t = extractText("lease.docx", docx);
+  assert.match(t, /Monthly rent:\t25,000 & deposit/);
+  assert.match(t, /Start/);
+  assert.match(t, /1 Nov/);
+
+  const pptx = makeZip({
+    "ppt/slides/slide2.xml": `<p:sld><a:p><a:r><a:t>Second slide</a:t></a:r></a:p></p:sld>`,
+    "ppt/slides/slide10.xml": `<p:sld><a:p><a:t>Tenth</a:t></a:p></p:sld>`,
+    "ppt/slides/slide1.xml": `<p:sld><a:p><a:t>Title slide</a:t></a:p><a:p><a:t>Q3 results</a:t></a:p></p:sld>`,
+  });
+  const p = extractText("deck.pptx", pptx);
+  assert.ok(p.indexOf("Title slide") < p.indexOf("Second slide") && p.indexOf("Second slide") < p.indexOf("Tenth"), "slides in numeric order");
+  assert.match(p, /--- Slide 1 ---\nTitle slide\nQ3 results/);
+
+  const xlsx = makeZip({
+    "xl/workbook.xml": `<workbook><sheets><sheet name="Budget" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst><si><t>Item</t></si><si><t>Cost</t></si><si><r><t>Ren</t></r><r><t>t</t></r></si></sst>`,
+    "xl/worksheets/sheet1.xml": `<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="C2"><v>25000</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>Food</t></is></c><c r="B3"/></row></sheetData></worksheet>`,
+  });
+  const x = extractText("budget.xlsx", xlsx);
+  assert.match(x, /--- Sheet: Budget ---\nItem\tCost\nRent\t\t25000\nFood/);
+
+  assert.equal(extractText("a.csv", Buffer.from("﻿name,age\nA,3\n")), "name,age\nA,3");
+  assert.equal(classify("x.pdf").kind, "pdf");
+  assert.equal(classify("x.JPG").kind, "image");
+  assert.match(classify("old.doc").error, /\.docx/);
+  assert.match(classify("thing.exe").error, /aren't supported/);
+  const { unzip } = await import("../doc-text.mjs");
+  assert.throws(() => unzip(Buffer.from("not a zip at all, definitely not")), /not a valid Office file/);
+});
+
+test("documents: added to a conversation, read once, asked about, removed with it", async () => {
+  const conv = (await j("POST", "/api/conversations")).data;
+  const before = geminiCalls.json.length;
+  const pdf = Buffer.from("%PDF-1.4 fake rental agreement");
+  const up = await j("POST", `/api/conversations/${conv.id}/documents?name=${encodeURIComponent("Lease 2026.pdf")}`, pdf);
+  assert.equal(up.status, 200, up.text);
+  const docId = up.data.document.id;
+  assert.equal(up.data.document.status, "analysing");
+  assert.equal(up.data.message.modality, "document");
+  assert.deepEqual(up.data.message.document, { id: docId, name: "Lease 2026.pdf" });
+
+  const ready = await until(async () => {
+    const d = (await j("GET", `/api/documents/${docId}`)).data;
+    return d.status === "ready" && d;
+  });
+  assert.equal(ready.analysis.docType, "contract");
+  assert.deepEqual(ready.analysis.suggestedQuestions, ["When does it end?"]);
+  assert.equal(ready.analysis.pages, 2);
+  const readCall = geminiCalls.json.slice(before).find((c) => /You read documents/.test(c.system));
+  const inline = readCall.parts.find((p) => p.inlineData);
+  assert.equal(inline.inlineData.mimeType, "application/pdf");
+  assert.equal(Buffer.from(inline.inlineData.data, "base64").toString(), pdf.toString(), "the PDF itself goes to Gemini");
+
+  // the attachment is part of the conversation
+  const c = (await j("GET", `/api/conversations/${conv.id}`)).data;
+  assert.equal(c.messages.at(-1).document.id, docId);
+
+  // a text document: its text goes to Gemini, not the file
+  const md = await j("POST", `/api/conversations/${conv.id}/documents?name=notes.md`, Buffer.from("# Notes\nThe deposit is two months of rent."));
+  assert.equal(md.status, 200);
+  await until(async () => (await j("GET", `/api/documents/${md.data.document.id}`)).data.status === "ready");
+
+  // asking: one document, or all of them
+  const one = await j("POST", `/api/conversations/${conv.id}/documents/ask`, { question: "How much is the rent?", documentId: docId });
+  assert.equal(one.status, 200, one.text);
+  assert.equal(one.data.found, true);
+  assert.match(one.data.answer, /25,000/);
+  assert.equal(one.data.quotes[0].where, "page 1");
+  let ask = geminiCalls.json.at(-1);
+  assert.match(ask.parts.at(-1).text, /How much is the rent/);
+  assert.equal(ask.parts.filter((p) => p.inlineData).length, 1);
+  assert.ok(!ask.parts.some((p) => /deposit is two months/.test(p.text || "")), "only the chosen document");
+  await j("POST", `/api/conversations/${conv.id}/documents/ask`, { question: "What is the deposit?" });
+  ask = geminiCalls.json.at(-1);
+  assert.ok(ask.parts.some((p) => /deposit is two months/.test(p.text || "")) && ask.parts.some((p) => p.inlineData), "all documents");
+
+  // the assistant is told about them
+  const setup = (await j("GET", `/api/live/setup?conversation=${conv.id}`)).data;
+  assert.match(setup.systemInstruction, new RegExp(`document_id ${docId}: "Lease 2026.pdf" \\(PDF\\) — contract, A one-year rental agreement`));
+  assert.match(setup.systemInstruction, /call ask_document/);
+
+  // files that can't be used are refused with a clear reason
+  const bad = await j("POST", `/api/conversations/${conv.id}/documents?name=old.doc`, Buffer.from("x"));
+  assert.equal(bad.status, 415);
+  assert.match(bad.data.error, /Save it as \.docx/);
+  const big = await j("POST", `/api/conversations/${conv.id}/documents?name=scan.png`, Buffer.alloc(15 * 1024 * 1024, 1));
+  assert.equal(big.status, 413);
+  assert.match(big.data.error, /limit for this type is 14 MB/);
+  const empty = await j("POST", `/api/conversations/${conv.id}/documents?name=empty.txt`, Buffer.from("   \n  "));
+  assert.equal(empty.status, 422);
+
+  // a failed read can be retried
+  docFail = true;
+  const f = await j("POST", `/api/conversations/${conv.id}/documents?name=photo.jpg`, Buffer.from([0xff, 0xd8, 0xff, 1, 2]));
+  const failed = await until(async () => {
+    const d = (await j("GET", `/api/documents/${f.data.document.id}`)).data;
+    return d.status === "error" && d;
+  });
+  assert.match(failed.error, /model unavailable/);
+  docFail = false;
+  await j("POST", `/api/documents/${f.data.document.id}/retry`);
+  await until(async () => (await j("GET", `/api/documents/${f.data.document.id}`)).data.status === "ready");
+
+  // the original can be downloaded
+  const file = await fetch(`${B}/api/documents/${docId}/file`);
+  assert.equal(Buffer.from(await file.arrayBuffer()).toString(), pdf.toString());
+  assert.match(file.headers.get("content-disposition"), /Lease%202026\.pdf/);
+
+  // removing one document, then the whole conversation, removes the stored files
+  const docsDir = path.join(dataDir, "documents");
+  const n = fs.readdirSync(docsDir).length;
+  assert.equal((await j("DELETE", `/api/documents/${md.data.document.id}`)).data.deleted, true);
+  assert.equal(fs.readdirSync(docsDir).length, n - 1);
+  await j("DELETE", `/api/conversations/${conv.id}`);
+  assert.equal(fs.readdirSync(docsDir).length, 0);
+  assert.equal((await j("GET", `/api/documents/${docId}`)).status, 404);
 });
 
 test("data can be deleted", async () => {

@@ -38,6 +38,7 @@ export const api = {
   patch: <T>(url: string, body?: unknown) => request<T>("PATCH", url, body),
   del: <T>(url: string) => request<T>("DELETE", url),
   postAudio: <T>(url: string, pcm: ArrayBuffer) => request<T>("POST", url, undefined, pcm),
+  upload: <T>(url: string, file: Blob) => request<T>("POST", url, undefined, file),
 };
 
 /**
@@ -94,8 +95,10 @@ export type Health = {
 export type Message = {
   id?: number;
   role: "user" | "assistant";
-  modality?: "voice" | "text";
+  modality?: "voice" | "text" | "document";
   text: string;
+  // a document the user added (modality "document")
+  document?: { id: number; name: string };
   createdAt?: number;
   pending?: boolean;
   // web search used for an assistant answer
@@ -105,6 +108,35 @@ export type Message = {
 };
 
 export type WebSource = { title: string; uri: string };
+
+export type DocumentAnalysis = {
+  title: string;
+  docType: string | null;
+  overview: string;
+  keyPoints: string[];
+  suggestedQuestions: string[];
+  pages: number | null;
+};
+
+export type DocumentInfo = {
+  id: number;
+  conversationId: number;
+  name: string;
+  kind: "pdf" | "image" | "office" | "text";
+  label: string;
+  size: number;
+  status: "analysing" | "ready" | "error";
+  error: string | null;
+  truncated: boolean;
+  analysis: DocumentAnalysis | null;
+  createdAt: number;
+};
+
+/** File types AURA can read (same list as the server's). */
+export const DOCUMENT_ACCEPT =
+  ".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.docx,.pptx,.xlsx,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.html,.htm,.log,.yaml,.yml,.ini,.toml,.srt,.vtt," +
+  ".js,.jsx,.ts,.tsx,.py,.java,.c,.h,.cpp,.cs,.go,.rs,.rb,.php,.sql,.sh,.css,.scss";
+export const DOCUMENT_LIMIT_MB = { inline: 14, other: 30 };
 
 export type ConversationSummary = {
   id: number;
@@ -124,6 +156,7 @@ export type Conversation = {
   startedAt: number;
   updatedAt: number;
   messages: Message[];
+  documents?: DocumentInfo[];
 };
 
 export type MemoryProposal = {

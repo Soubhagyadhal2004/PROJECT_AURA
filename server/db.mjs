@@ -139,6 +139,27 @@ addColumn("meetings", "memory_error", "TEXT");
 addColumn("memories", "meeting_id", "INTEGER REFERENCES meetings(id) ON DELETE SET NULL"); // learned from this meeting
 addColumn("memory_proposals", "meeting_id", "INTEGER REFERENCES meetings(id) ON DELETE SET NULL");
 
+// documents added to an assistant conversation (files live in data/documents/)
+db.exec(`
+CREATE TABLE IF NOT EXISTS documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,            -- pdf | image | office | text
+  label TEXT NOT NULL,           -- "PDF", "Word document", ...
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  file TEXT NOT NULL,            -- file name inside data/documents
+  text TEXT,                     -- extracted text (Office and text files)
+  truncated INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,          -- analysing | ready | error
+  error TEXT,
+  analysis TEXT,                 -- JSON overview written by Gemini
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS documents_conv ON documents(conversation_id);
+`);
+
 export const now = () => Date.now();
 
 export function f32ToBlob(arr) {
