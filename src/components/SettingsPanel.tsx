@@ -12,6 +12,14 @@ const LIVE_MODELS = [
   { id: "gemini-3.8-live", label: "Gemini 3.8 Live" },
 ];
 
+// language of the user's speech in voice chat (the server turns these into language codes)
+const SPEECH_LANGUAGES: { id: Settings["assistantLanguage"]; label: string }[] = [
+  { id: "auto", label: "Detect automatically" },
+  { id: "en", label: "English" },
+  { id: "hi", label: "Hindi" },
+  { id: "en-hi", label: "English and Hindi" },
+];
+
 type Props = { open: boolean; onClose: () => void; health: Health | null; onDataChanged: () => void };
 
 export default function SettingsPanel({ open, onClose, health, onDataChanged }: Props) {
@@ -95,6 +103,23 @@ export default function SettingsPanel({ open, onClose, health, onDataChanged }: 
                 </select>
                 <small className="muted">Applies to the next voice session. Web search on a Gemini 3 model needs paid search quota; pick the 2.5 model to use it for free.</small>
               </label>
+              <label className="field">
+                <span>Language you speak (for transcripts)</span>
+                <select
+                  value={s.assistantLanguage}
+                  onChange={(e) => update({ assistantLanguage: e.target.value as Settings["assistantLanguage"] })}
+                >
+                  {SPEECH_LANGUAGES.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+                <small className="muted">
+                  How AURA writes down what you say in voice chat. Choose English if your English shows up in Hindi script. AURA's
+                  understanding and replies don't depend on it. Some Live models may ignore it.
+                </small>
+              </label>
               <label className="check">
                 <input type="checkbox" checked={s.autoMemory} onChange={(e) => update({ autoMemory: e.target.checked })} />
                 <span>Learn memories from conversations automatically</span>
@@ -107,7 +132,7 @@ export default function SettingsPanel({ open, onClose, health, onDataChanged }: 
                 <input type="checkbox" checked={s.webSearch} onChange={(e) => update({ webSearch: e.target.checked })} />
                 <span>Let AURA search the web (Google Search) for news and current information</span>
               </label>
-              <p className="muted small">Voice, model and search changes apply to the next voice session.</p>
+              <p className="muted small">Voice, model, language and search changes apply to the next voice session.</p>
             </section>
 
             <section>

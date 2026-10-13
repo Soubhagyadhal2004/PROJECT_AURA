@@ -1,17 +1,13 @@
 {
   "name": "aura",
   "version": "1.0.0",
+  "productName": "AURA",
+  "description": "AURA - Adaptive Unified Responsive Assistant",
+  "author": "Soubhagyadhal2004 <soubhagyadhal12345@gmail.com>",
+  "main": "desktop/main.cjs",
   "dependencies": {
     "@google/genai": "^2.28.0",
-    "@huggingface/transformers": "^4.3.1",
-    "classnames": "^2.5.1",
-    
-    "eventemitter3": "^5.0.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-scripts": "5.0.1",
-    "sass": "^1.80.6",
-    "web-vitals": "^2.1.4"
+    "@huggingface/transformers": "^4.3.1"
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c yellow,cyan \"npm:server\" \"npm:start\"",
@@ -20,7 +16,11 @@
     "build": "react-scripts build",
     "serve": "node server/index.mjs",
     "test": "react-scripts test",
-    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs"
+    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs",
+    "test:desktop": "node --test desktop/tests/server-process.test.cjs",
+    "desktop": "npm run build && electron .",
+    "desktop:start": "electron .",
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "eslintConfig": {
     "extends": [
@@ -48,8 +48,17 @@
     "@types/node": "^16.18.119",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "classnames": "^2.5.1",
     "concurrently": "^9.1.2",
-    "typescript": "^5.6.3"
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.12",
+    "eventemitter3": "^5.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-scripts": "5.0.1",
+    "sass": "^1.80.6",
+    "typescript": "^5.6.3",
+    "web-vitals": "^2.1.4"
   },
   "overrides": {
     "typescript": "^5.6.3"
@@ -58,5 +67,41 @@
   "proxy": "http://127.0.0.1:3001",
   "engines": {
     "node": ">=22.13"
+  },
+  "build": {
+    "appId": "com.soubhagya.aura",
+    "productName": "AURA",
+    "extraMetadata": {
+      "main": "desktop/main.cjs"
+    },
+    "directories": {
+      "output": "dist-desktop",
+      "buildResources": "desktop/assets"
+    },
+    "files": [
+      "package.json",
+      "build/**/*",
+      "server/**/*",
+      "!server/tests/**",
+      "desktop/**/*",
+      "!desktop/tests/**",
+      "!node_modules/onnxruntime-node/bin/napi-v*/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v*/darwin/**"
+    ],
+    "asar": false,
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "desktop/assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "AURA"
+    }
   }
 }

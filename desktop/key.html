@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+  <title>Gemini API key</title>
+  <style>
+    :root { --bg: #15171c; --panel: #1d2027; --line: #2c3039; --text: #e8eaef; --muted: #9aa1ad; --accent: #6aa9ee; --bad: #f08a8a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px 30px; background: var(--bg); color: var(--text);
+           font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
+    h1 { font-size: 19px; font-weight: 600; margin: 0 0 8px; }
+    p { color: var(--muted); margin: 0 0 14px; }
+    a { color: var(--accent); }
+    label { display: block; font-weight: 600; margin: 18px 0 6px; }
+    input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+            background: var(--panel); color: var(--text); font: 14px Consolas, monospace; }
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .error { color: var(--bad); min-height: 21px; margin: 6px 0 0; font-size: 13px; }
+    .row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    button { padding: 9px 18px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+             color: var(--text); font: inherit; cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #0d1320; font-weight: 600; }
+    .note { font-size: 12.5px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Connect AURA to Gemini</h1>
+  <p id="intro">AURA needs a Gemini API key for voice conversations, memory, transcription and documents.
+    Create one for free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>.</p>
+  <form id="form">
+    <label for="key">API key</label>
+    <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…" autofocus />
+    <div class="error" id="error" role="alert"></div>
+    <div class="row">
+      <button type="button" id="cancel">Not now</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+  <p class="note">The key is stored on this computer only, encrypted with your Windows account, and is never
+    sent to the AURA window. You can change it later from the AURA menu.</p>
+  <script>
+    const q = new URLSearchParams(location.search);
+    if (q.get("firstRun") !== "1") {
+      document.getElementById("title").textContent = q.get("hasKey") === "1" ? "Change Gemini API key" : "Gemini API key";
+      document.getElementById("cancel").textContent = "Cancel";
+    }
+    const input = document.getElementById("key");
+    const error = document.getElementById("error");
+    document.getElementById("cancel").onclick = () => window.auraKey.cancel();
+    document.getElementById("form").onsubmit = (e) => {
+      e.preventDefault();
+      const key = input.value.trim();
+      if (!key) { error.textContent = "Paste your key first."; return; }
+      if (/\s/.test(key) || key.length < 20) { error.textContent = "That doesn't look like a Gemini API key."; return; }
+      window.auraKey.save(key);
+    };
+  </script>
+</body>
+</html>

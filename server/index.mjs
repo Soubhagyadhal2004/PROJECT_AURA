@@ -113,8 +113,18 @@ app.get("/api/live/setup", h((req) => {
     ? `${systemInstruction}\n\nThe user is continuing an earlier conversation. What was said before (oldest first):\n${earlier}\n\nPick up naturally from there; don't repeat or summarise it unless asked.`
     : systemInstruction;
   if (docLines.length) full += `\n\nDocuments the user added to this conversation:\n${docLines.join("\n")}`;
-  return { model: s.liveModel, voice: s.voice, systemInstruction: full, memoryCount: memories.length, webSearch: !!s.webSearch };
+  return {
+    model: s.liveModel,
+    voice: s.voice,
+    systemInstruction: full,
+    memoryCount: memories.length,
+    webSearch: !!s.webSearch,
+    languageCodes: ASSISTANT_LANGUAGES[s.assistantLanguage] || [],
+  };
 }));
+
+// Settings -> language codes for transcribing the user's speech in voice chat ([] = detect automatically)
+const ASSISTANT_LANGUAGES = { auto: [], en: ["en-IN"], hi: ["hi-IN"], "en-hi": ["en-IN", "hi-IN"] };
 
 // ---- conversations ----------------------------------------------------------------------
 app.get("/api/conversations", h(() => conv.listConversations()));
