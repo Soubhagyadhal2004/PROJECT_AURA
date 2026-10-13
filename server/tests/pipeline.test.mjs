@@ -383,6 +383,20 @@ test("meeting: two people in one piece of speech are split into two lines", asyn
   assert.equal(d.segments[1].endMs, 6000);
 });
 
+test("voice chat: the speech language setting becomes transcription language codes", async () => {
+  assert.equal((await j("GET", "/api/settings")).data.assistantLanguage, "auto");
+  assert.deepEqual((await j("GET", "/api/live/setup")).data.languageCodes, [], "automatic by default");
+  const codes = async (assistantLanguage) => {
+    await j("PUT", "/api/settings", { assistantLanguage });
+    return (await j("GET", "/api/live/setup")).data.languageCodes;
+  };
+  assert.deepEqual(await codes("en"), ["en-IN"]);
+  assert.deepEqual(await codes("hi"), ["hi-IN"]);
+  assert.deepEqual(await codes("en-hi"), ["en-IN", "hi-IN"]);
+  assert.deepEqual(await codes("klingon"), [], "unknown values fall back to automatic");
+  await j("PUT", "/api/settings", { assistantLanguage: "auto" });
+});
+
 test("meeting: transcription gets earlier lines as context and the language hint", async () => {
   await j("PUT", "/api/settings", { meetingLanguage: "English and Hindi" });
   const m = (await j("POST", "/api/meetings", { title: "Context" })).data;

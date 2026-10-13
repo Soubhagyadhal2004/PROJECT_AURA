@@ -191,6 +191,8 @@ export const DEFAULT_SETTINGS = {
   voiceMatchThreshold: 0.58,
   // cosine similarity needed to treat a piece of speech as an already-heard voice
   voiceClusterThreshold: 0.55,
+  // language of the user's speech in voice chat, used to transcribe it: "auto", "en", "hi" or "en-hi"
+  assistantLanguage: "auto",
   // optional hint for meeting transcription, e.g. "English and Hindi"
   meetingLanguage: "",
   // "live": Gemini 3.5 Transcribe Live (streaming, no daily request cap on the free tier)

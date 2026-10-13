@@ -77,6 +77,7 @@ export type Settings = {
   confirmMemoryChanges: boolean;
   voiceMatchThreshold: number;
   voiceClusterThreshold: number;
+  assistantLanguage: "auto" | "en" | "hi" | "en-hi";
   meetingLanguage: string;
   meetingTranscriber: "live" | "standard";
   meetingMemory: boolean;

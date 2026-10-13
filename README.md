@@ -36,6 +36,31 @@ The first start downloads three small models from the Hugging Face hub into `dat
 
 Single-port alternative: `npm run build` once, then `npm run serve` and open <http://localhost:3001>.
 
+## Desktop app (Windows)
+
+The same app also runs as a Windows desktop app. Electron starts the local server with its own
+built-in Node and shows AURA in a window, so `src/` and `server/` are unchanged.
+
+```bash
+npm install
+npm run desktop      # builds the web app, then opens AURA in a desktop window
+npm run dist:win     # builds an installer: dist-desktop/AURA Setup <version>.exe
+```
+
+- **API key**: on first start AURA asks for your Gemini key and stores it encrypted with your Windows
+  account (`%APPDATA%\AURA\desktop-settings.json`). Change it from the **AURA** menu. When you run
+  `npm run desktop` from the project, a key in `.env` also works. `.env` is never put in the installer.
+- **Your data**: the installed app keeps its data in `%APPDATA%\AURA\data`. Running `npm run desktop` from the
+  project keeps using the project's `data/` folder. To take your existing memories, conversations and voice
+  profiles into the installed app, quit AURA and copy the project's `data` folder over `%APPDATA%\AURA\data`.
+  Set `AURA_DATA_DIR` to use another folder.
+- **Microphone**: Windows must allow desktop apps to use the microphone
+  (Settings → Privacy & security → Microphone → "Let desktop apps access your microphone").
+- The server listens on 127.0.0.1 port 3017 (another free port if that one is taken). It stops when you
+  close AURA, and also if the app crashes or is ended from Task Manager. Its log is at
+  `%APPDATA%\AURA\logs\server.log` (AURA menu → Open server log).
+- Closing the window quits AURA; there is no tray icon or background mode yet.
+
 ## How it works
 
 ```
@@ -51,6 +76,9 @@ browser (React, existing CRA stack)               local server (server/, plain N
 - The browser never sees the API key: the server issues a single-use
   [ephemeral token](https://ai.google.dev/gemini-api/docs/ephemeral-tokens) for each session.
 - Input and output audio transcription are enabled, so spoken turns appear as text and are saved.
+  If your English is written down in Hindi script, set Settings → Assistant → "Language you speak" to English
+  (or English and Hindi). It only changes the transcript; some Live models may ignore it, and if one rejects it
+  AURA reconnects with automatic detection and says so.
 - Dropped sessions show a **Reconnect** button that resumes the same context (session resumption);
   server `goAway` notices reconnect automatically. Microphone and API errors are shown in plain words.
 - Default Live model: `gemini-3.1-flash-live-preview` (change it in Settings, e.g. to
@@ -158,6 +186,7 @@ Settings → Your data to delete conversations, memories, transcripts or everyth
 
 ```bash
 npm run test:server   # API, memory conflict handling, speaker attribution, corrections, export
+npm run test:desktop  # desktop shell: starting, stopping and restarting the local server
 npm test -- --watchAll=false   # frontend unit tests (voice-activity segmenter)
 ```
 
@@ -201,6 +230,8 @@ server/            local API (node:http + node:sqlite), Gemini calls, local mode
   meeting-notes.mjs  minutes, memory from meetings, date/topic lookup for the assistant
   documents.mjs    documents in conversations   doc-text.mjs  text from Office and text files
   models.mjs       transformers.js embeddings   gemini.mjs   tokens, JSON + transcription calls
+desktop/           Windows app (Electron): main.cjs window + menu + key prompt,
+                   server-process.cjs starts/stops the server, server-entry.mjs its entry point
 src/
   hooks/use-live-api.ts      Live session, transcripts, persistence, recall tool
   lib/genai-live-client.ts   Live websocket client (from the console, token-based)

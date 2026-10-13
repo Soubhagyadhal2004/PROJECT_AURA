@@ -176,10 +176,23 @@ export type UseLiveAPIResults = {
 };
 
 const QUOTA_RE = /quota|exceeded|resource.?exhausted|rate.?limit/i;
+// how a Live model says it doesn't take the transcription language (wording varies between models)
+const LANGUAGE_RE = /language.?code|languageCodes|input_?audio_?transcription|inputAudioTranscription|unsupported language|invalid.*language/i;
 const SEARCH_OFF_NOTICE =
   "Web search was rejected for this model (its search quota is used up or not available on your plan), so AURA switched it off and reconnected. Voice still works. For search, pick a different Live model in Settings, such as gemini-2.5-flash-native-audio-preview-12-2025, then reload the page.";
 
-type SetupResponse = { model: string; voice: string; systemInstruction: string; memoryCount: number; webSearch: boolean };
+const LANGUAGE_OFF_NOTICE =
+  "This Live model didn't accept the speech language set in Settings, so AURA reconnected with automatic language detection. Voice still works. To use the setting, try a different Live model in Settings.";
+
+type SetupResponse = {
+  model: string;
+  voice: string;
+  systemInstruction: string;
+  memoryCount: number;
+  webSearch: boolean;
+  /** languages for transcribing the user's speech ([] or missing = detect automatically) */
+  languageCodes?: string[];
+};
 
 type TurnSearch = { sources: WebSource[]; searchQueries: string[]; searchWidget?: string };
 
@@ -220,6 +233,10 @@ export function useLiveAPI(): UseLiveAPIResults {
   const searchOn = useRef(false);
   /** set once Google rejected search for quota reasons; search stays off until the page is reloaded */
   const searchBlocked = useRef(false);
+  /** whether the running session was started with a speech language from Settings */
+  const languageOn = useRef(false);
+  /** set once the model refused that language; it stays off until the page is reloaded */
+  const languageBlocked = useRef(false);
 
   const convIdRef = useRef<number | null>(null);
   const userClosing = useRef(false);
@@ -360,6 +377,15 @@ export function useLiveAPI(): UseLiveAPIResults {
         setTimeout(() => connectRef.current?.({ resume: handle, withMic: mic }), 0);
         return;
       }
+      if (!userClosing.current && languageOn.current && !languageBlocked.current && LANGUAGE_RE.test(e?.reason || "")) {
+        // the model refused the speech language from Settings: carry on with automatic detection
+        languageBlocked.current = true;
+        languageOn.current = false;
+        setNotice(LANGUAGE_OFF_NOTICE);
+        const handle = Boolean(client.resumptionHandle);
+        setTimeout(() => connectRef.current?.({ resume: handle, withMic: mic }), 0);
+        return;
+      }
       if (!userClosing.current) {
         const reason = e?.reason ? `: ${e.reason}` : "";
         setError(`The voice session ended unexpectedly${reason}.`);
@@ -477,11 +503,14 @@ export function useLiveAPI(): UseLiveAPIResults {
         if (!resume) client.resumptionHandle = null;
         const useSearch = setup.webSearch && !searchBlocked.current;
         searchOn.current = useSearch;
+        const languageCodes = languageBlocked.current ? [] : setup.languageCodes || [];
+        languageOn.current = languageCodes.length > 0;
         const config: LiveConnectConfig = {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: setup.voice } } },
           systemInstruction: { parts: [{ text: setup.systemInstruction }] },
-          inputAudioTranscription: {},
+          // transcript of what the user says; a language from Settings stops English being written in Hindi script
+          inputAudioTranscription: languageOn.current ? { languageCodes } : {},
           outputAudioTranscription: {},
           tools: useSearch
             ? [{ googleSearch: {} }, { functionDeclarations: TOOL_DECLARATIONS }]
@@ -501,6 +530,12 @@ export function useLiveAPI(): UseLiveAPIResults {
           searchBlocked.current = true;
           searchOn.current = false;
           setNotice(SEARCH_OFF_NOTICE);
+          return connectRef.current ? connectRef.current({ resume, withMic }) : false;
+        }
+        if (languageOn.current && !languageBlocked.current && LANGUAGE_RE.test(String(e?.message || ""))) {
+          languageBlocked.current = true;
+          languageOn.current = false;
+          setNotice(LANGUAGE_OFF_NOTICE);
           return connectRef.current ? connectRef.current({ resume, withMic }) : false;
         }
         setError(`Couldn't start the voice session. ${e.message}`);
