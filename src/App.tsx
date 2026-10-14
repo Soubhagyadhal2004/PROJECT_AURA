@@ -6,6 +6,7 @@ import AssistantView from "./views/AssistantView";
 import MemoryView from "./views/MemoryView";
 import MeetingView from "./views/MeetingView";
 import SettingsPanel from "./components/SettingsPanel";
+import Nudges from "./components/Nudges";
 import { api, Health } from "./lib/api";
 
 function App() {
@@ -91,6 +92,8 @@ function App() {
             refreshHealth();
           }}
         />
+        {/* renders nothing unless an AURA_PROACTIVE_* switch is on */}
+        <Nudges onChanged={refreshHealth} />
       </div>
     </LiveAPIProvider>
   );

@@ -1,0 +1,30 @@
+{
+  "experiment": "gate-sim",
+  "personas": 20,
+  "seeds": 3,
+  "errors": [
+    0,
+    0.1,
+    0.2
+  ],
+  "u": 0.05,
+  "uSweep": [
+    0,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "uSweepError": 0.1,
+  "policies": [
+    "auto",
+    "gate"
+  ],
+  "fillerInitial": 30,
+  "fillerPerGap": 10,
+  "extractor": "simulated (eval/lib/harness.mjs makeSimExtractor)",
+  "extractMinScore": "default (0.25)",
+  "candidates": "default",
+  "repropose": 2,
+  "restate": 1,
+  "startedAt": "2026-10-13T18:53:25.818Z"
+}

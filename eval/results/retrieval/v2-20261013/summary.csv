@@ -1,0 +1,16 @@
+size,variant,label,n,hitAtK,hitLo,hitHi,top1,emptyRate
+25,aura_k6,"AURA (hybrid 0.85/0.15, min 0.25), k=6 — recall tool",726,0.706612,0.672473,0.738575,0.705234,0.286501
+25,aura_k4,"AURA (hybrid, min 0.25), k=4 — typed messages",726,0.706612,0.672473,0.738575,0.705234,0.286501
+25,hybrid_nomin_k6,"hybrid, no minimum score, k=6",726,0.99449,0.98592,0.997855,0.92011,0
+25,semantic_nomin_k6,"embedding only, no minimum score, k=6",726,0.99449,0.98592,0.997855,0.896694,0
+25,lexical_k6,"keywords only (AURA fallback when the model is unavailable, min 0.1), k=6",726,0.606061,0.570048,0.640957,0.581267,0.334711
+100,aura_k6,"AURA (hybrid 0.85/0.15, min 0.25), k=6 — recall tool",726,0.705234,0.671058,0.73725,0.690083,0.280992
+100,aura_k4,"AURA (hybrid, min 0.25), k=4 — typed messages",726,0.702479,0.668229,0.734599,0.690083,0.280992
+100,hybrid_nomin_k6,"hybrid, no minimum score, k=6",726,0.96832,0.952911,0.978799,0.860882,0
+100,semantic_nomin_k6,"embedding only, no minimum score, k=6",726,0.9573,0.940029,0.969758,0.827824,0
+100,lexical_k6,"keywords only (AURA fallback when the model is unavailable, min 0.1), k=6",726,0.606061,0.570048,0.640957,0.575758,0.325069
+350,aura_k6,"AURA (hybrid 0.85/0.15, min 0.25), k=6 — recall tool",726,0.699725,0.665401,0.731945,0.687328,0.280992
+350,aura_k4,"AURA (hybrid, min 0.25), k=4 — typed messages",726,0.694215,0.65975,0.726635,0.687328,0.280992
+350,hybrid_nomin_k6,"hybrid, no minimum score, k=6",726,0.891185,0.866439,0.911812,0.833333,0
+350,semantic_nomin_k6,"embedding only, no minimum score, k=6",726,0.871901,0.845618,0.894269,0.786501,0
+350,lexical_k6,"keywords only (AURA fallback when the model is unavailable, min 0.1), k=6",726,0.606061,0.570048,0.640957,0.567493,0.30854

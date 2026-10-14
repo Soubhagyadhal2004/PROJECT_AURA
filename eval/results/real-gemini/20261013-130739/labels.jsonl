@@ -1,0 +1,67 @@
+{"run":"auto-1-0","policy":"auto","memory_id":32,"content":"The user is learning German.","auto_label":"true"}
+{"run":"auto-1-0","policy":"auto","memory_id":33,"content":"The user is an eggetarian.","auto_label":"true"}
+{"run":"auto-1-0","policy":"auto","memory_id":46,"content":"The user lives in Kolkata.","auto_label":"true"}
+{"run":"auto-1-0","policy":"auto","memory_id":59,"content":"The user would spend every evening on the beach if they moved to Goa.","auto_label":"hypothetical"}
+{"run":"auto-1-0","policy":"auto","memory_id":60,"content":"The user's dog is named Mithu.","auto_label":"true"}
+{"run":"auto-1-0","policy":"auto","memory_id":61,"content":"The user takes their coffee with extra sugar.","auto_label":"true"}
+{"run":"auto-1-0","policy":"auto","memory_id":83,"content":"The user's main hobby is cycling.","auto_label":"true"}
+{"run":"auto-1-1","policy":"auto","memory_id":116,"content":"The user prefers their coffee as a cappuccino.","auto_label":"true"}
+{"run":"auto-1-1","policy":"auto","memory_id":117,"content":"The user's dog is named Mithu.","auto_label":"true"}
+{"run":"auto-1-1","policy":"auto","memory_id":128,"content":"The user's friend Rohan bought a Thar.","auto_label":"third-party"}
+{"run":"auto-1-1","policy":"auto","memory_id":130,"content":"The user drives a Seltos.","auto_label":"stale"}
+{"run":"auto-1-1","policy":"auto","memory_id":131,"content":"The user works at Swiggy.","auto_label":"true"}
+{"run":"auto-1-1","policy":"auto","memory_id":143,"content":"The user goes to the gym at 6 pm every day.","auto_label":"true"}
+{"run":"auto-1-1","policy":"auto","memory_id":144,"content":"The user finished leading project Lotus last week and is currently between projects as of October 2026.","auto_label":"ended"}
+{"run":"auto-1-1","policy":"auto","memory_id":166,"content":"The user lives in Chennai.","auto_label":"true"}
+{"run":"auto-1-1","policy":"auto","memory_id":167,"content":"The user bought a Swift car on 2026-10-13.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":198,"content":"The user is leading a project called Falcon at work.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":200,"content":"The user works at Wipro.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":213,"content":"The user's cousin works at Google in Zurich.","auto_label":"third-party"}
+{"run":"auto-1-2","policy":"auto","memory_id":215,"content":"The user's sister is named Sneha.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":216,"content":"The user lives in Bhubaneswar.","auto_label":"stale"}
+{"run":"auto-1-2","policy":"auto","memory_id":227,"content":"The user takes their coffee black.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":238,"content":"The user's main hobby is chess.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":249,"content":"The user goes to the gym at 7 am every day.","auto_label":"true"}
+{"run":"auto-1-2","policy":"auto","memory_id":250,"content":"The user is learning Korean.","auto_label":"true"}
+{"run":"auto-1-3","policy":"auto","memory_id":282,"content":"The user goes to the gym at 6 pm every day.","auto_label":"true"}
+{"run":"auto-1-3","policy":"auto","memory_id":283,"content":"The user's main hobby is playing the guitar.","auto_label":"true"}
+{"run":"auto-1-3","policy":"auto","memory_id":284,"content":"The user works at Flipkart.","auto_label":"true"}
+{"run":"auto-1-3","policy":"auto","memory_id":295,"content":"If the user had a cat, they would name her Luna.","auto_label":"hypothetical"}
+{"run":"auto-1-3","policy":"auto","memory_id":298,"content":"The user's sister is named Priya.","auto_label":"true"}
+{"run":"auto-1-3","policy":"auto","memory_id":322,"content":"The user wants to move to Goa someday.","auto_label":"false"}
+{"run":"auto-1-3","policy":"auto","memory_id":323,"content":"The user is learning Japanese.","auto_label":"true"}
+{"run":"auto-1-3","policy":"auto","memory_id":334,"content":"The user's friend Rohan bought a Thar.","auto_label":"third-party"}
+{"run":"auto-1-3","policy":"auto","memory_id":335,"content":"The user finished leading the Nimbus project and is currently between projects as of October 2026.","auto_label":"ended"}
+{"run":"auto-1-3","policy":"auto","memory_id":336,"content":"The user drinks their coffee black.","auto_label":"true"}
+{"run":"gate-1-0","policy":"gate","memory_id":368,"content":"The user is learning German.","auto_label":"true"}
+{"run":"gate-1-0","policy":"gate","memory_id":369,"content":"The user is eggetarian.","auto_label":"true"}
+{"run":"gate-1-0","policy":"gate","memory_id":382,"content":"The user lives in Kolkata.","auto_label":"true"}
+{"run":"gate-1-0","policy":"gate","memory_id":395,"content":"The user's dog is named Mithu.","auto_label":"true"}
+{"run":"gate-1-0","policy":"gate","memory_id":396,"content":"The user takes their coffee with extra sugar as of October 2026.","auto_label":"true"}
+{"run":"gate-1-0","policy":"gate","memory_id":418,"content":"The user's main hobby is cycling.","auto_label":"true"}
+{"run":"gate-1-1","policy":"gate","memory_id":451,"content":"The user prefers their coffee as a cappuccino.","auto_label":"true"}
+{"run":"gate-1-1","policy":"gate","memory_id":452,"content":"The user's dog is called Mithu.","auto_label":"true"}
+{"run":"gate-1-1","policy":"gate","memory_id":463,"content":"The user's friend Rohan bought a Thar.","auto_label":"third-party"}
+{"run":"gate-1-1","policy":"gate","memory_id":465,"content":"The user drives a Seltos.","auto_label":"stale"}
+{"run":"gate-1-1","policy":"gate","memory_id":466,"content":"The user works at Swiggy.","auto_label":"true"}
+{"run":"gate-1-1","policy":"gate","memory_id":467,"content":"The user is leading a project called Lotus at work.","auto_label":"stale"}
+{"run":"gate-1-1","policy":"gate","memory_id":478,"content":"The user goes to the gym at 6 pm every day.","auto_label":"true"}
+{"run":"gate-1-1","policy":"gate","memory_id":500,"content":"The user bought a Swift car on 2026-10-13.","auto_label":"true"}
+{"run":"gate-1-1","policy":"gate","memory_id":501,"content":"The user lives in Chennai.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":532,"content":"The user is leading a project called Falcon at work.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":534,"content":"The user works at Wipro.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":547,"content":"The user's cousin works at Google in Zurich.","auto_label":"third-party"}
+{"run":"gate-1-2","policy":"gate","memory_id":549,"content":"The user's sister is named Sneha.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":550,"content":"The user lives in Bhubaneswar.","auto_label":"stale"}
+{"run":"gate-1-2","policy":"gate","memory_id":561,"content":"The user takes their coffee black.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":572,"content":"If the user had a cat, they would name her Luna.","auto_label":"hypothetical"}
+{"run":"gate-1-2","policy":"gate","memory_id":573,"content":"The user's main hobby is chess.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":584,"content":"The user goes to the gym at 7 am every day.","auto_label":"true"}
+{"run":"gate-1-2","policy":"gate","memory_id":585,"content":"The user is learning Korean.","auto_label":"true"}
+{"run":"gate-1-3","policy":"gate","memory_id":617,"content":"The user goes to the gym at 6 pm every day.","auto_label":"true"}
+{"run":"gate-1-3","policy":"gate","memory_id":618,"content":"The user's main hobby is guitar.","auto_label":"true"}
+{"run":"gate-1-3","policy":"gate","memory_id":619,"content":"The user works at Flipkart.","auto_label":"true"}
+{"run":"gate-1-3","policy":"gate","memory_id":630,"content":"The user would name a hypothetical cat Luna.","auto_label":"hypothetical"}
+{"run":"gate-1-3","policy":"gate","memory_id":633,"content":"The user's sister is named Priya.","auto_label":"true"}
+{"run":"gate-1-3","policy":"gate","memory_id":657,"content":"The user is learning Japanese as of October 2026.","auto_label":"true"}
+{"run":"gate-1-3","policy":"gate","memory_id":668,"content":"The user drinks their coffee black.","auto_label":"true"}

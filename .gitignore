@@ -18,3 +18,7 @@ npm-debug.log*
 
 # desktop installer output
 /dist-desktop
+
+# evaluation: datasets and scratch folders
+/eval/data
+/_to_delete

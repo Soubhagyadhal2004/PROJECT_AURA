@@ -1,4 +1,4 @@
-// AURA — dark, quiet interface. One bold element: the amber orb that reacts to sound.
+// AURA — dark, quiet interface. One bold element: the logo mark that reacts to sound (cyan → violet, from the logo).
 
 :root {
   --bg: #15171c;
@@ -9,9 +9,11 @@
   --text: #e7e9ee;
   --muted: #8f96a6;
   --faint: #626a7b;
-  --accent: #e8b65a;
-  --accent-soft: rgba(232, 182, 90, 0.14);
-  --accent-ink: #1d1608;
+  --accent: #6fc3ea;
+  --accent-soft: rgba(111, 195, 234, 0.14);
+  --accent-ink: #06121c;
+  --accent-2: #9a6cf0;
+  --accent-grad: linear-gradient(135deg, #5fd0ee 0%, #7a8cf0 55%, #9a6cf0 100%);
   --live: #57c78a;
   --rec: #e66a5c;
   --info: #7aa7e8;
@@ -269,7 +271,7 @@ code {
   display: flex;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid rgba(232, 182, 90, 0.35);
+  border: 1px solid rgba(111, 195, 234, 0.35);
   border-radius: var(--radius-m);
   background: var(--accent-soft);
 }
@@ -566,14 +568,19 @@ code {
   }
 }
 .btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-grad);
+  border-color: transparent;
   color: var(--accent-ink);
   font-weight: 600;
+  box-shadow: 0 3px 14px rgba(122, 140, 240, 0.28);
 
   &:hover:not(:disabled) {
-    background: #f0c472;
-    border-color: #f0c472;
+    background: var(--accent-grad);
+    border-color: transparent;
+    filter: brightness(1.1);
+  }
+  &:disabled {
+    box-shadow: none;
   }
 }
 .btn--ghost {
@@ -754,8 +761,8 @@ input[type="checkbox"] {
   margin-left: auto;
 }
 .banner--warn {
-  background: rgba(232, 182, 90, 0.08);
-  border-color: rgba(232, 182, 90, 0.35);
+  background: rgba(111, 195, 234, 0.08);
+  border-color: rgba(111, 195, 234, 0.35);
 }
 .banner--error {
   background: rgba(230, 106, 92, 0.08);
@@ -782,13 +789,15 @@ input[type="checkbox"] {
 // ---- orb -----------------------------------------------------------------------------
 .orb {
   --level: 0;
-  --hue-core: 232, 182, 90;
+  --hue-core: 111, 195, 234;
+  --hue-end: 154, 108, 240;
   position: relative;
   display: inline-block;
   flex-shrink: 0;
 
   &--recording {
     --hue-core: 230, 106, 92;
+    --hue-end: 230, 106, 92;
   }
 }
 .orb__core,
@@ -799,12 +808,12 @@ input[type="checkbox"] {
 }
 .orb__core {
   inset: 18%;
-  background: radial-gradient(circle at 38% 34%, rgba(255, 244, 220, 0.9), rgba(var(--hue-core), 0.95) 45%, rgba(var(--hue-core), 0.35) 100%);
+  background: radial-gradient(circle at 38% 34%, rgba(232, 248, 255, 0.9), rgba(var(--hue-core), 0.95) 40%, rgba(var(--hue-end), 0.6) 100%);
   opacity: 0.55;
   transition: opacity 0.4s;
 }
 .orb__halo {
-  background: radial-gradient(circle, rgba(var(--hue-core), 0.45) 0%, rgba(var(--hue-core), 0) 68%);
+  background: radial-gradient(circle, rgba(var(--hue-core), 0.4) 0%, rgba(var(--hue-end), 0.18) 45%, rgba(var(--hue-end), 0) 68%);
   transform: scale(calc(0.85 + var(--level) * 0.5));
   opacity: calc(0.25 + var(--level) * 0.75);
   transition: transform 0.12s ease-out, opacity 0.12s ease-out;
@@ -817,6 +826,36 @@ input[type="checkbox"] {
 }
 .orb--speaking .orb__core {
   box-shadow: 0 0 calc(10px + var(--level) * 40px) rgba(var(--hue-core), 0.6);
+}
+
+// Logo variant (the large mark on the empty assistant screen): the brand mark sits on the halo.
+.orb--logo {
+  .orb__core {
+    display: none;
+  }
+  .orb__halo {
+    inset: -14%;
+  }
+}
+.orb__logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.88;
+  filter: drop-shadow(0 6px 18px rgba(90, 160, 230, 0.3));
+  transform: scale(calc(1 + var(--level) * 0.06));
+  transition: opacity 0.4s, transform 0.12s ease-out, filter 0.4s;
+}
+.orb--logo.orb--active .orb__logo {
+  opacity: 1;
+  filter: drop-shadow(0 6px 22px rgba(110, 170, 240, 0.5));
+}
+.orb--logo.orb--speaking .orb__logo {
+  filter: drop-shadow(0 0 calc(12px + var(--level) * 30px) rgba(122, 140, 240, 0.6));
 }
 
 @keyframes breathe {
@@ -1045,6 +1084,23 @@ input[type="checkbox"] {
     position: absolute;
     inset: 0;
   }
+  // The button itself is a full gradient disc in the logo colours.
+  .orb__core {
+    inset: 0;
+    opacity: 0.9;
+    background: var(--accent-grad);
+    box-shadow: 0 0 18px rgba(122, 140, 240, 0.4);
+  }
+  .orb--active .orb__core {
+    opacity: 1;
+  }
+  .orb--recording .orb__core {
+    background: radial-gradient(circle at 38% 34%, rgba(255, 230, 225, 0.9), rgba(var(--hue-core), 0.95) 45%);
+    box-shadow: 0 0 18px rgba(230, 106, 92, 0.4);
+  }
+  &:hover:not(:disabled) .orb__core {
+    filter: brightness(1.1);
+  }
   &:disabled {
     cursor: progress;
   }
@@ -1056,7 +1112,7 @@ input[type="checkbox"] {
   font-variation-settings: "FILL" 1;
 }
 .voice-button:not(.voice-button--on) .voice-button__icon {
-  color: var(--text);
+  color: var(--accent-ink);
 }
 
 .mic-toggle--off {
@@ -1505,7 +1561,7 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 .tag--preference {
-  color: #e8b65a;
+  color: #b9a2f7;
 }
 .tag--personal {
   color: #9fc3ee;
@@ -1921,7 +1977,7 @@ fieldset.field {
 .tline__unsure {
   font-size: 0.7rem;
   color: var(--accent);
-  border: 1px solid rgba(232, 182, 90, 0.4);
+  border: 1px solid rgba(111, 195, 234, 0.4);
   border-radius: 4px;
   padding: 0 4px;
   cursor: help;
@@ -2187,5 +2243,165 @@ fieldset.field {
   }
   .composer__state {
     display: none;
+  }
+}
+
+// ---- proactive nudges (only rendered when an AURA_PROACTIVE_* switch is on) ----
+.nudges__pill {
+  position: fixed;
+  right: 20px;
+  bottom: 100px; // above the message box
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  cursor: pointer;
+  &:hover,
+  &:focus-visible {
+    color: var(--text);
+  }
+}
+.nudges__count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+}
+.nudges {
+  position: fixed;
+  right: 20px;
+  bottom: 100px; // above the message box
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  animation: pull-up 160ms ease-out;
+}
+.nudges__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nudges__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nudges__empty,
+.nudges__error {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.nudges__error {
+  color: var(--rec);
+}
+@media (max-width: 720px) {
+  .nudges,
+  .nudges__pill {
+    right: 16px;
+    bottom: 88px;
+  }
+}
+.nudge {
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-m);
+  background: var(--raised);
+  p {
+    margin: 0 0 6px;
+  }
+  ul {
+    margin: 0 0 8px;
+    padding-left: 18px;
+    line-height: 1.45;
+  }
+}
+.nudge--due {
+  border-color: var(--accent);
+}
+.nudge__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  .material-symbols-outlined {
+    font-size: 18px;
+  }
+}
+.nudge__close {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  .material-symbols-outlined {
+    font-size: 18px;
+  }
+}
+.nudge__text {
+  font-weight: 600;
+}
+.nudge__when {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+.nudge__note {
+  color: var(--faint);
+  font-size: 0.8rem;
+}
+.nudge__quote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--accent);
+}
+.nudge__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.nudge__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  label {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    resize: vertical;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nudges {
+    animation: none;
   }
 }

@@ -1,0 +1,11 @@
+{
+  "experiment": "retrieval",
+  "personas": 20,
+  "seeds": 3,
+  "sizes": [
+    25,
+    100,
+    350
+  ],
+  "startedAt": "2026-10-13T08:13:36.090Z"
+}

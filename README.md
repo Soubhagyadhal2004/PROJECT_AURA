@@ -176,6 +176,26 @@ every profile for a fresh sample, which helps tune the thresholds in Settings. P
 older speaker model are marked and must be re-recorded (voiceprints from different models can't be
 compared).
 
+### Proactive nudges (optional, off by default)
+
+AURA can bring things up on its own. Each type has its own switch in `.env`; with none set, nothing is
+created, scheduled or shown and AURA works exactly as before. Restart the server after changing them.
+
+| Switch | What it does |
+| --- | --- |
+| `AURA_PROACTIVE_MEMORY=1` | Once a day at most, asks "Is this still true?" about an older fact that tends to change (work, people, plans, where you live). **Yes** marks it confirmed, **Changed** replaces it (recorded through the normal change-proposal path, then applied because you typed it), **Forget** deletes it. |
+| `AURA_PROACTIVE_REMINDERS=1` | Ask by voice or text ("remind me…", "set a reminder…", "set an alarm…"). In voice chat AURA uses a `set_reminder` tool, reads back the exact day and time, and sets it only after you say yes. A **Set reminder** card with the resolved date also appears in the inbox, and dated action items in meeting minutes become suggestions too. When it is due, the reminder shows in the inbox and is read aloud: by AURA in its own voice during a voice session, otherwise by the browser's built-in speech (a voice installed on your computer when there is one). The speaker button in the inbox turns this off. The AURA tab must be open, and the browser only lets a page speak after you have clicked in it once. With this switch off, voice AURA is told it can't set reminders, so it won't promise to. |
+| `AURA_PROACTIVE_BRIEFING=1` | **Brief me** in the inbox: up to 5 lines from upcoming reminders, recent memory changes, open memory reviews and the last meeting's action items (one Gemini call; none when there is nothing to say). Add `AURA_BRIEFING_TIME=08:30` to get one automatically once a day. |
+
+Nudges appear in a small inbox at the bottom right with Accept / Later (snooze) / Dismiss. Limits for
+all types: `AURA_NUDGE_MAX_PER_DAY` (3), `AURA_NUDGE_COOLDOWN_MIN` after a dismissal (120),
+`AURA_QUIET_HOURS` (22:00-08:00, or `off`), `AURA_MEMORY_CHECKS_PER_DAY` (1, max 2),
+`AURA_MEMORY_CHECK_AFTER_DAYS` (30; half that for facts learned from meetings), `AURA_TIMEZONE`
+(default: the computer's). During a voice conversation only reminder cards appear; nothing appears while a
+meeting is recording. Reminders that fall in quiet hours or over the daily limit wait until they are allowed.
+Saying no to a reminder doesn't start the cooldown. Outcomes per
+type: `GET /api/proactive/stats`. Dates are parsed with chrono-node in your time zone.
+
 ## Your data
 
 All data lives in `data/` (git-ignored): `aura.db` (conversations, memories, meetings, voice

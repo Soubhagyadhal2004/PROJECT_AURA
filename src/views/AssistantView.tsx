@@ -312,7 +312,7 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
       <div className="assistant__body">
         {messages.length === 0 ? (
           <div className="assistant__empty">
-            <Orb size={168} level={level} active={connected} tone={tone} />
+            <Orb size={168} level={level} active={connected} tone={tone} logo />
             <h2>{connected ? "I'm listening." : "Hi, I'm AURA."}</h2>
             <p>
               {connected

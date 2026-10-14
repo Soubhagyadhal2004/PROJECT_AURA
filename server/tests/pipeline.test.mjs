@@ -745,3 +745,68 @@ test("data can be deleted", async () => {
   assert.deepEqual((await j("GET", "/api/memories")).data, []);
   assert.deepEqual((await j("GET", "/api/speakers")).data, []);
 });
+
+test("AURA_REPROPOSE: a turned-down change comes back only after new words from the user, and only N times", async () => {
+  await j("PUT", "/api/settings", { confirmMemoryChanges: true });
+  const mem = await import("../memory.mjs");
+  const wait = () => new Promise((r) => setTimeout(r, 8));
+  const c = (await j("POST", "/api/conversations")).data;
+  await j("POST", `/api/conversations/${c.id}/messages`, { role: "user", text: "I live in Pune." });
+  nextOps = [{ action: "add", content: "The user lives in Pune.", category: "personal" }];
+  const pune = (await j("POST", `/api/memories/extract/${c.id}`)).data[0].memory;
+  const say = async (text, ops) => {
+    await wait();
+    await j("POST", `/api/conversations/${c.id}/messages`, { role: "user", text });
+    nextOps = ops;
+    return (await j("POST", `/api/memories/extract/${c.id}`)).data;
+  };
+  const move = [{ action: "update", memory_id: pune.id, content: "The user lives in Hyderabad.", category: "personal" }];
+  const reject = async () => {
+    await wait();
+    const p = (await j("GET", "/api/memories/proposals")).data;
+    assert.equal(p.length, 1);
+    await j("POST", `/api/memories/proposals/${p[0].id}/reject`);
+  };
+  process.env.AURA_REPROPOSE = "1";
+  try {
+    assert.equal((await say("I moved to Hyderabad.", move))[0].op, "proposed");
+    await reject();
+    // the same words again, nothing new said after the rejection: no extraction call, nothing proposed
+    assert.deepEqual((await j("POST", `/api/memories/extract/${c.id}`)).data, []);
+    // new words after the rejection: asked once more
+    assert.equal((await say("Like I said, I live in Hyderabad.", move))[0].op, "proposed");
+    await reject();
+    // limit of 1 re-proposal reached
+    assert.deepEqual(await say("Yes, still in Hyderabad.", move), []);
+    // default (0): never again
+    process.env.AURA_REPROPOSE = "0";
+    assert.deepEqual(await say("Hyderabad it is.", move), []);
+  } finally {
+    delete process.env.AURA_REPROPOSE;
+  }
+  assert.equal(mem.pendingProposalCount(), 0);
+});
+
+test("AURA_CANDIDATES: modes change which memories the extractor is shown, default stays as it was", async () => {
+  const mem = await import("../memory.mjs");
+  const { db } = await import("../db.mjs");
+  const pune = await mem.addMemory({ content: "The user lives in Pune.", category: "personal" });
+  const others = [];
+  for (let i = 0; i < 10; i++) others.push(await mem.addMemory({ content: `The user's favourite number is ${i + 100}.`, category: "other" }));
+  db.prepare("UPDATE memories SET updated_at = 1 WHERE id = ?").run(pune.id); // oldest: not among the 8 most recent
+  others.forEach((m, i) => db.prepare("UPDATE memories SET updated_at = ? WHERE id = ?").run(1000 + i, m.id));
+  const text = "Relocated to a brand new city.";
+  const ids = async (mode) => (await mem.selectCandidates(text, mode)).map((m) => m.id);
+  assert.ok(!(await ids("default")).includes(pune.id), "default: no overlap, not shown");
+  assert.ok(!(await ids("sentence")).includes(pune.id), "sentence: still needs the minimum score");
+  assert.ok((await ids("nomin")).includes(pune.id), "nomin: shown without the minimum score");
+  assert.ok((await ids("adaptive")).includes(pune.id), "adaptive: shown, the text sounds like a change");
+  // the switch is read from the environment when no mode is passed
+  process.env.AURA_CANDIDATES = "nomin";
+  try {
+    assert.ok((await mem.selectCandidates(text)).some((m) => m.id === pune.id));
+  } finally {
+    delete process.env.AURA_CANDIDATES;
+  }
+  assert.ok(!(await mem.selectCandidates(text)).some((m) => m.id === pune.id));
+});

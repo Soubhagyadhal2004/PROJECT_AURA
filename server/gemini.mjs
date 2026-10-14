@@ -26,6 +26,9 @@ async function client() {
 
 export const hasKey = () => Boolean(GEMINI_API_KEY);
 
+// Running totals for generateJSON calls (read by the evaluation harness; the app ignores them).
+export const usage = { calls: 0, promptTokens: 0, outputTokens: 0, latencyMs: 0 };
+
 /** Short-lived, single-use token the browser uses to open a Gemini Live session. */
 export async function createLiveToken() {
   await client(); // throws a helpful error when the key is missing
@@ -69,6 +72,7 @@ async function withRetry(fn, tries = 4) {
 /** Generate JSON that follows `schema` (a JSON Schema object). */
 export async function generateJSON({ system, prompt, schema, model = TEXT_MODEL, parts }) {
   const c = await client();
+  const t0 = Date.now();
   const res = await withRetry(() =>
     c.models.generateContent({
       model,
@@ -81,6 +85,11 @@ export async function generateJSON({ system, prompt, schema, model = TEXT_MODEL,
       },
     })
   );
+  const um = res.usageMetadata || {};
+  usage.calls++;
+  usage.promptTokens += um.promptTokenCount || 0;
+  usage.outputTokens += um.candidatesTokenCount || 0;
+  usage.latencyMs += Date.now() - t0;
   const text = res.text || "";
   try {
     return JSON.parse(text);

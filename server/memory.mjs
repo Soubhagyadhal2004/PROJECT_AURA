@@ -2,6 +2,24 @@
 import { db, now, f32ToBlob, blobToF32, getSettings } from "./db.mjs";
 import { embedText, cosine } from "./models.mjs";
 import { generateJSON, hasKey } from "./gemini.mjs";
+import { EventEmitter } from "node:events";
+
+// Instrumentation: extraction calls, applied operations and the user's review decisions.
+// Nothing in the app depends on it; the evaluation harness (eval/) listens to it.
+export const memoryEvents = new EventEmitter();
+
+// Minimum search score used when picking the existing memories shown to the extractor. Unset = the same
+// minimum as normal search (0.25). The evaluation (eval/) sets AURA_EXTRACT_MIN_SCORE=0 to test always
+// showing the 12 best matches.
+const EXTRACT_MIN_SCORE = process.env.AURA_EXTRACT_MIN_SCORE ? Number(process.env.AURA_EXTRACT_MIN_SCORE) : undefined;
+
+// Optional behaviours (all OFF by default, so the app behaves as before). Read on every call so the
+// evaluation can switch them inside one process.
+//   AURA_CANDIDATES = default | nomin | sentence | adaptive   how the memories shown to the extractor are chosen
+//   AURA_REPROPOSE  = N   a change the user turned down may be proposed again, at most N times, but only after
+//                         the user has said something new (0 = never again, as before)
+const candidateMode = () => process.env.AURA_CANDIDATES || "default";
+const reproposeMax = () => Math.max(0, Number(process.env.AURA_REPROPOSE || 0) || 0);
 
 export const CATEGORIES = ["preference", "personal", "people", "work", "plan", "other"];
 
@@ -27,7 +45,7 @@ function stem(w) {
   return w;
 }
 
-function lexicalScore(q, d) {
+export function lexicalScore(q, d) {
   const qt = new Set(tokens(q));
   const dt = new Set(tokens(d));
   if (!qt.size || !dt.size) return 0;
@@ -140,7 +158,7 @@ async function supersede(oldId, content, category, origin) {
  * Semantic search over active memories. Falls back to keyword overlap when the
  * local embedding model is unavailable.
  */
-export async function searchMemories(query, k = 6, { includeInactive = false } = {}) {
+export async function searchMemories(query, k = 6, { includeInactive = false, minScore: floor } = {}) {
   const rows = db
     .prepare(`SELECT * FROM memories ${includeInactive ? "" : "WHERE status = 'active'"}`)
     .all();
@@ -159,7 +177,7 @@ export async function searchMemories(query, k = 6, { includeInactive = false } =
     const score = qv && ev ? 0.85 * sem + 0.15 * lex : lex;
     scored.push({ ...rowOut(r), score });
   }
-  const minScore = qv ? 0.25 : 0.1;
+  const minScore = floor ?? (qv ? 0.25 : 0.1);
   return scored
     .filter((s) => s.score >= minScore)
     .sort((a, b) => b.score - a.score)
@@ -217,6 +235,42 @@ const EXTRACT_SCHEMA = {
   required: ["operations"],
 };
 
+// Words that suggest the user is changing something they said before. Used only by the "adaptive" mode.
+const CHANGE_CUE = /\b(moved|relocated|now|no longer|anymore|any more|stopped|quit|gave up|given up|sold|bought|switched|changed|instead|used to|finished|left|resigned|passed away|died|forget|delete|correction|actually|new|just)\b/i;
+const splitSentences = (text) =>
+  String(text || "")
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 3);
+
+/**
+ * The existing memories shown to the extractor. Only these can be changed, so a change whose target is not
+ * among them cannot be carried out.
+ *   default  : the 12 best matches for the whole text (search minimum score) + the 8 most recently confirmed
+ *   nomin    : same, without the minimum score
+ *   sentence : also search each sentence on its own, keep the best score per memory (search minimum score)
+ *   adaptive : sentence search without the minimum score, and 24 matches instead of 12 when the text sounds
+ *              like a change ("moved", "no longer", "sold", ...)
+ */
+export async function selectCandidates(userText, mode = candidateMode()) {
+  const floor = mode === "nomin" || mode === "adaptive" ? 0 : EXTRACT_MIN_SCORE;
+  let related;
+  if (mode === "sentence" || mode === "adaptive") {
+    const k = mode === "adaptive" && CHANGE_CUE.test(userText) ? 24 : 12;
+    const best = new Map();
+    for (const q of new Set([userText, ...splitSentences(userText)])) {
+      for (const m of await searchMemories(q, k, { minScore: floor })) {
+        const prev = best.get(m.id);
+        if (!prev || m.score > prev.score) best.set(m.id, m);
+      }
+    }
+    related = [...best.values()].sort((a, b) => b.score - a.score).slice(0, k);
+  } else {
+    related = await searchMemories(userText, 12, { minScore: floor });
+  }
+  return [...new Map([...related, ...coreMemories(8)].map((m) => [m.id, m])).values()];
+}
+
 export async function extractFromConversation(conversationId) {
   const conv = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
   if (!conv) return [];
@@ -231,9 +285,7 @@ export async function extractFromConversation(conversationId) {
     .reverse();
 
   const userText = fresh.filter((m) => m.role === "user").map((m) => m.text).join("\n");
-  const related = await searchMemories(userText, 12);
-  const recent = coreMemories(8);
-  const candidates = [...new Map([...related, ...recent].map((m) => [m.id, m])).values()];
+  const candidates = await selectCandidates(userText);
 
   const fmt = (m) => `${m.role === "user" ? "User" : "AURA"}: ${m.text}`;
   const prompt = [
@@ -247,7 +299,15 @@ export async function extractFromConversation(conversationId) {
     fresh.map(fmt).join("\n"),
   ].join("\n");
 
+  const t0 = Date.now();
   const out = await generateJSON({ system: EXTRACT_SYSTEM, prompt, schema: EXTRACT_SCHEMA });
+  memoryEvents.emit("extraction", {
+    source: "conversation",
+    conversationId,
+    candidateIds: candidates.map((c) => c.id),
+    operations: (out.operations || []).length,
+    latencyMs: Date.now() - t0,
+  });
   const applied = await applyOperations(out.operations, candidates, { source: "conversation", conversationId, meetingId: null });
   db.prepare("UPDATE conversations SET extracted_upto = ? WHERE id = ?").run(lastId, conversationId);
   if (applied.length) console.log(`[memory] conversation ${conversationId}:`, applied.map((a) => a.op).join(", "));
@@ -284,6 +344,7 @@ async function applyOperations(operations, candidates, origin) {
       console.error("[memory] failed to apply", op, e.message);
     }
   }
+  memoryEvents.emit("applied", { ...origin, requested: (operations || []).length, applied });
   return applied;
 }
 
@@ -326,7 +387,7 @@ export async function extractFromMeeting({ meetingId, title, startedAt, lines })
     const tail = all.join("\n").slice(-MAX * 0.4);
     transcript = `${head}\n[... middle of the meeting left out ...]\n${tail}`;
   }
-  const related = await searchMemories(spoken.map((l) => l.text).join(" ").slice(0, 3000), 12);
+  const related = await searchMemories(spoken.map((l) => l.text).join(" ").slice(0, 3000), 12, { minScore: EXTRACT_MIN_SCORE });
   const recent = coreMemories(8);
   const candidates = [...new Map([...related, ...recent].map((m) => [m.id, m])).values()];
   const date = new Date(startedAt);
@@ -343,7 +404,15 @@ export async function extractFromMeeting({ meetingId, title, startedAt, lines })
     "Transcript:",
     transcript,
   ].join("\n");
+  const t0 = Date.now();
   const out = await generateJSON({ system: MEETING_SYSTEM, prompt, schema: EXTRACT_SCHEMA });
+  memoryEvents.emit("extraction", {
+    source: "meeting",
+    meetingId,
+    candidateIds: candidates.map((c) => c.id),
+    operations: (out.operations || []).length,
+    latencyMs: Date.now() - t0,
+  });
   const ops = (out.operations || []).filter((o) => o.action !== "forget");
   const applied = await applyOperations(ops, candidates, { source: "meeting", conversationId: null, meetingId });
   if (applied.length) {
@@ -371,16 +440,27 @@ const proposalOut = (r) => ({
   current: getMemory(r.memory_id),
 });
 
-function propose({ action, memoryId, content, category, conversationId = null, meetingId = null }) {
+// explicit: the user stated this change themselves (e.g. answering a memory check), so earlier pending or
+// turned-down proposals for the same change don't block it.
+export function propose({ action, memoryId, content, category, conversationId = null, meetingId = null, explicit = false }) {
   const target = db.prepare("SELECT * FROM memories WHERE id = ? AND status = 'active'").get(memoryId);
   if (!target) return null;
   if (action === "update" && norm(content) === norm(target.content)) return null; // nothing changes
-  // don't ask twice for the same change, and don't re-ask one the user turned down
-  const same = db
-    .prepare("SELECT * FROM memory_proposals WHERE memory_id = ? AND action = ? AND status IN ('pending','rejected')")
+  // don't ask twice for the same change, and (by default) don't re-ask one the user turned down
+  const matching = db
+    .prepare("SELECT * FROM memory_proposals WHERE memory_id = ? AND action = ? AND status IN ('pending','rejected') ORDER BY id")
     .all(memoryId, action)
-    .find((p) => action !== "update" || norm(p.content) === norm(content));
-  if (same) return null;
+    .filter((p) => action !== "update" || norm(p.content) === norm(content));
+  if (!explicit && matching.some((p) => p.status === "pending")) return null;
+  const rejections = matching.filter((p) => p.status === "rejected");
+  if (!explicit && rejections.length) {
+    // AURA_REPROPOSE=N: a turned-down change may come back up to N times, only after the user said something new
+    if (rejections.length > reproposeMax()) return null;
+    if (conversationId != null) {
+      const last = db.prepare("SELECT MAX(created_at) AS t FROM messages WHERE conversation_id = ? AND role = 'user'").get(conversationId);
+      if (!last?.t || last.t <= rejections[rejections.length - 1].decided_at) return null;
+    }
+  }
   // a newer proposal for the same memory replaces an older pending one
   db.prepare("DELETE FROM memory_proposals WHERE memory_id = ? AND status = 'pending'").run(memoryId);
   const id = db
@@ -426,15 +506,42 @@ export async function acceptProposal(id, { content } = {}) {
     deleteMemory(p.memory_id); // also removes the proposal (cascade)
   }
   db.prepare("UPDATE memory_proposals SET status = 'accepted', decided_at = ? WHERE id = ?").run(now(), id);
+  memoryEvents.emit("decision", {
+    proposalId: id,
+    action: p.action,
+    memoryId: p.memory_id,
+    decision: "accepted",
+    // the user changed the wording before accepting
+    edited: p.action === "update" && content != null && norm(content) !== norm(p.content || ""),
+    waitMs: now() - p.created_at,
+  });
   return { ok: true, memory: result };
 }
 
 /** Keep the memory as it is. */
 export function rejectProposal(id) {
+  const p = db.prepare("SELECT * FROM memory_proposals WHERE id = ?").get(id);
   const n = db.prepare("UPDATE memory_proposals SET status = 'rejected', decided_at = ? WHERE id = ? AND status = 'pending'").run(now(), id).changes;
+  if (n) memoryEvents.emit("decision", { proposalId: id, action: p.action, memoryId: p.memory_id, decision: "rejected", edited: false, waitMs: now() - p.created_at });
   // the user just confirmed the current fact
   if (n) db.prepare("UPDATE memories SET updated_at = ? WHERE id = (SELECT memory_id FROM memory_proposals WHERE id = ?)").run(now(), id);
   return n > 0;
+}
+
+/** The user said a memory is still true: it counts as confirmed now (same as turning down a change). */
+export function confirmMemory(id) {
+  return db.prepare("UPDATE memories SET updated_at = ? WHERE id = ? AND status = 'active'").run(now(), id).changes > 0;
+}
+
+/**
+ * A change the user asked for directly (answering "Is this still true?"): it goes through the normal proposal
+ * path (propose -> acceptProposal) so it is recorded like any reviewed change, then is applied at once.
+ * action: update (needs content) | forget. Returns acceptProposal's result, or null when nothing changes.
+ */
+export async function applyUserChange({ action, memoryId, content = null }) {
+  const p = propose({ action, memoryId, content, explicit: true });
+  if (!p) return null;
+  return acceptProposal(p.id, action === "update" ? { content } : {});
 }
 
 // Debounced, serialised background extraction ---------------------------------

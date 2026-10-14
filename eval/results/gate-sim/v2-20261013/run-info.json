@@ -1,0 +1,12 @@
+{
+  "finishedAt": "2026-10-13T08:12:43.008Z",
+  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
+  "node": "v22.23.2",
+  "platform": "linux-x64",
+  "lastSessionEmbedStats": {
+    "hits": 168589,
+    "misses": 652,
+    "ms": 4612
+  },
+  "lastSessionSeconds": 52.27596186700001
+}

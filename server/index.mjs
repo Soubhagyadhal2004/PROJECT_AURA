@@ -14,6 +14,7 @@ import * as meet from "./meetings.mjs";
 import * as notes from "./meeting-notes.mjs";
 import * as docs from "./documents.mjs";
 import { ACCEPT } from "./doc-text.mjs";
+import * as proactive from "./proactive.mjs";
 
 // ---- tiny router ---------------------------------------------------------------------
 const routes = [];
@@ -113,12 +114,16 @@ app.get("/api/live/setup", h((req) => {
     ? `${systemInstruction}\n\nThe user is continuing an earlier conversation. What was said before (oldest first):\n${earlier}\n\nPick up naturally from there; don't repeat or summarise it unless asked.`
     : systemInstruction;
   if (docLines.length) full += `\n\nDocuments the user added to this conversation:\n${docLines.join("\n")}`;
+  full += proactive.switches().reminders
+    ? `\n\nReminders: when the user asks to be reminded of something (or to set a reminder or alarm), call set_reminder with what it is for and when, in their words (e.g. "tomorrow at 5pm", "in 20 minutes"). Then read back the exact day and time it returns and ask the user to confirm. Only after a clear yes, call confirm_reminder with the reminderId; if they say no or want a different time, call cancel_reminder (and set_reminder again for a new time). Never say a reminder is set unless confirm_reminder succeeded. When it is due, AURA shows the reminder in the app and reads it aloud (the AURA tab must be open); it cannot call the user's phone.`
+    : `\n\nYou cannot set reminders, alarms or timers in this app. If asked, say so plainly and do not promise to remind the user.`;
   return {
     model: s.liveModel,
     voice: s.voice,
     systemInstruction: full,
     memoryCount: memories.length,
     webSearch: !!s.webSearch,
+    reminders: proactive.switches().reminders, // the browser adds the reminder tools
     languageCodes: ASSISTANT_LANGUAGES[s.assistantLanguage] || [],
   };
 }));
@@ -141,6 +146,7 @@ app.post("/api/conversations/:id/messages", h((req) => {
   const meta = role === "assistant" ? conv.cleanSearchMeta({ sources, searchQueries }) : null;
   const m = conv.addMessage(id(req), { role, text: String(text).trim(), modality, meta });
   if (role === "assistant") mem.scheduleExtraction(id(req));
+  if (role === "user") proactive.onUserMessage(id(req), m.text); // does nothing unless AURA_PROACTIVE_REMINDERS=1
   return m;
 }));
 app.post("/api/conversations/:id/end", h((req) => {
@@ -230,7 +236,11 @@ app.get("/api/meetings/find", h((req) => {
 }));
 app.get("/api/meetings/:id", h((req) => meet.getMeeting(id(req)) || (() => { throw notFound(); })()));
 app.get("/api/meetings/:id/brief", h((req) => notes.meetingBrief(id(req)) || (() => { throw notFound(); })()));
-app.post("/api/meetings/:id/minutes", h((req) => notes.writeMinutes(id(req))));
+app.post("/api/meetings/:id/minutes", h(async (req) => {
+  const m = await notes.writeMinutes(id(req));
+  proactive.onMinutes(m); // does nothing unless AURA_PROACTIVE_REMINDERS=1
+  return m;
+}));
 app.delete("/api/meetings/:id/minutes", h((req) => notes.deleteMinutes(id(req))));
 app.post("/api/meetings/:id/memorize", h(async (req) => {
   await notes.memorizeMeeting(id(req));
@@ -264,6 +274,24 @@ app.get("/api/meetings/:id/export", (req, res) => {
   sendDownload(res, { ...out, title: meet.getMeeting(id(req)).title || "meeting" });
 });
 
+// ---- proactive nudges (all off unless AURA_PROACTIVE_* is set; see server/proactive.mjs) -------------------
+app.get("/api/proactive", h(() => {
+  if (!proactive.anyOn()) return { switches: proactive.switches(), nudges: [], blocked: null };
+  proactive.surface();
+  return { switches: proactive.switches(), nudges: proactive.openNudges(), blocked: proactive.blockedReason() };
+}));
+app.post("/api/proactive/presence", h((req) => {
+  proactive.setPresence({ voice: !!req.body?.voice });
+  return { ok: true };
+}));
+app.post("/api/proactive/briefing", h(() => proactive.briefingNow()));
+app.get("/api/proactive/stats", h(() => proactive.stats()));
+// the voice assistant's reminder tools
+app.post("/api/proactive/reminders", h((req) => proactive.requestReminder({ what: req.body?.what, when: req.body?.when, conversationId: Number(req.body?.conversationId) || null })));
+app.post("/api/proactive/reminders/:id/confirm", h((req) => proactive.confirmReminder(id(req))));
+app.post("/api/proactive/reminders/:id/cancel", h((req) => proactive.cancelReminder(id(req))));
+app.post("/api/nudges/:id/decide", h((req) => proactive.decide(id(req), req.body || {})));
+
 // ---- wipe everything -----------------------------------------------------------------------------
 app.delete("/api/data", h(() => ({
   memories: mem.deleteAllMemories(),
@@ -271,6 +299,7 @@ app.delete("/api/data", h(() => ({
   meetings: meet.deleteAllMeetings(),
   profiles: meet.listProfiles().map((p) => meet.deleteProfile(p.id)).length,
   documents: docs.cleanUpFiles(),
+  nudges: proactive.deleteAllNudges(),
 })));
 
 // ---- static production build (npm run build && npm run serve) -------------------------------------
@@ -331,6 +360,7 @@ export function start(port = PORT) {
         console.warn("[aura] REACT_APP_GEMINI_API_KEY is set: rename it to GEMINI_API_KEY so the key is never bundled into the web app.");
       meet.resumePending();
       docs.resumeDocuments();
+      proactive.startScheduler(); // only when an AURA_PROACTIVE_* switch is on
       if (process.env.AURA_NO_WARMUP !== "1") warmUp();
       resolve(server);
     });

@@ -160,6 +160,33 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS documents_conv ON documents(conversation_id);
 `);
 
+// proactive nudges (server/proactive.mjs). Only written when an AURA_PROACTIVE_* switch is on.
+db.exec(`
+CREATE TABLE IF NOT EXISTS nudges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,              -- memory_check | reminder | briefing
+  text TEXT NOT NULL,
+  due_at INTEGER NOT NULL,         -- not shown before this time
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | shown | accepted | dismissed | snoozed
+  source_memory_id INTEGER REFERENCES memories(id) ON DELETE SET NULL,
+  source_conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER,
+  source_meeting_id INTEGER REFERENCES meetings(id) ON DELETE SET NULL,
+  kind TEXT,                       -- reminder: confirm (asks to set it) | due (the reminder itself)
+  payload TEXT,                    -- JSON details for the UI
+  outcome TEXT,                    -- what the user chose: yes | changed | forget | scheduled | done | ...
+  shown_at INTEGER,
+  snoozes INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS nudges_due ON nudges(status, due_at);
+-- a deleted memory must not live on in the text of a memory check
+CREATE TRIGGER IF NOT EXISTS nudges_memory_deleted BEFORE DELETE ON memories BEGIN
+  DELETE FROM nudges WHERE source_memory_id = OLD.id AND type = 'memory_check' AND status IN ('pending','shown','snoozed');
+  UPDATE nudges SET text = '(memory deleted)', payload = NULL WHERE source_memory_id = OLD.id AND type = 'memory_check';
+END;
+`);
+
 export const now = () => Date.now();
 
 export function f32ToBlob(arr) {

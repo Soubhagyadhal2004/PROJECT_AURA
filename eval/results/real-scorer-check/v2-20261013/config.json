@@ -1,0 +1,18 @@
+{
+  "experiment": "real-scorer-check",
+  "personas": 10,
+  "seeds": 1,
+  "policies": [
+    "auto",
+    "gate",
+    "gateAll"
+  ],
+  "u": 0.05,
+  "rpm": 12,
+  "fillerInitial": 30,
+  "fillerPerGap": 10,
+  "extractor": "simulated, e = 0.1",
+  "e": 0.1,
+  "extractMinScore": "default (0.25)",
+  "startedAt": "2026-10-13T08:17:38.873Z"
+}

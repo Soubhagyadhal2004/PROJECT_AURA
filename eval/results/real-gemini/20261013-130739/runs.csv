@@ -1,0 +1,9 @@
+policy,seed,persona,goldFacts,activeFacts,correct,trueMem,stale,falseMem,otherMem,fillerLost,forgets,forgetMemResidual,precision,recall,f1,userTurns,extractions,opsReturned,prompts,addPrompts,changePrompts,correctAccepted,correctRejected,wrongAccepted,wrongRejected,injectedWrongChanges,injectedMisses,injectedSpurious,wrongChangesApplied,candidateMissesOnChange,changeTurns,extractionErrors,promptsPer100Turns,requests,promptTokens,outputTokens,meanLatencyMs
+auto,1,0,6,7,6,6,0,1,0,0,1,0,0.857143,1,0.923077,21,21,15,0,0,0,0,0,0,0,0,0,0,0,0,6,0,0,21,11734,790,4735.095238
+auto,1,1,6,9,6,6,2,1,0,0,1,0,0.666667,1,0.8,22,22,15,0,0,0,0,0,0,0,0,0,0,0,1,6,0,0,22,12694,857,4998.227273
+auto,1,2,7,9,7,7,1,1,0,0,1,1,0.777778,1,0.875,20,20,15,0,0,0,0,0,0,0,0,0,0,0,1,5,0,0,20,11359,774,4951.35
+auto,1,3,6,10,6,6,1,3,0,0,1,0,0.6,1,0.75,22,22,18,0,0,0,0,0,0,0,0,0,0,0,0,6,0,0,22,12716,898,4981.727273
+gate,1,0,6,6,6,6,0,0,0,0,1,0,1,1,1,21,21,14,6,0,6,6,0,0,0,0,0,0,0,0,6,0,28.571429,21,11923,755,5714.666667
+gate,1,1,6,9,6,6,2,1,0,0,1,0,0.666667,1,0.8,22,22,15,5,0,5,4,0,0,1,0,0,0,0,1,6,0,22.727273,22,12739,859,5003.772727
+gate,1,2,7,10,7,7,1,2,0,0,1,1,0.7,1,0.823529,20,20,16,4,0,4,4,0,0,0,0,0,0,0,1,5,0,20,20,11353,819,6208.45
+gate,1,3,6,7,6,6,0,1,0,0,1,0,0.857143,1,0.923077,22,22,19,6,0,6,6,0,0,0,0,0,0,0,0,6,0,27.272727,22,12737,892,5036

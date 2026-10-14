@@ -195,6 +195,31 @@ export type SpeakerProfile = {
   outdated: boolean;
 };
 
+// proactive nudges (server/proactive.mjs); all off unless AURA_PROACTIVE_* is set on the server
+export type Nudge = {
+  id: number;
+  type: "memory_check" | "reminder" | "briefing";
+  kind: string | null; // reminder: confirm | due; briefing: daily | on_demand
+  text: string;
+  dueAt: number;
+  status: "pending" | "shown" | "accepted" | "dismissed" | "snoozed";
+  payload: {
+    memory?: string;
+    what?: string;
+    at?: number;
+    when?: string;
+    lines?: string[];
+    lowConfidence?: boolean;
+    confirmedAt?: number;
+  } | null;
+};
+
+export type ProactiveState = {
+  switches: { memory: boolean; reminders: boolean; briefing: boolean };
+  nudges: Nudge[];
+  blocked: string | null;
+};
+
 export type MeetingSummary = {
   id: number;
   title: string;

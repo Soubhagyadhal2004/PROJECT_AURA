@@ -1,0 +1,17 @@
+{
+  "experiment": "real-gemini",
+  "personas": 12,
+  "seeds": 1,
+  "policies": [
+    "auto",
+    "gate"
+  ],
+  "u": 0,
+  "rpm": 12,
+  "fillerInitial": 30,
+  "fillerPerGap": 10,
+  "extractor": "Gemini gemini-3.5-flash-lite",
+  "e": null,
+  "extractMinScore": "default (0.25)",
+  "startedAt": "2026-10-13T08:39:39.442Z"
+}

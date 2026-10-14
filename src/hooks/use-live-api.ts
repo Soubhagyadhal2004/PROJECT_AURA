@@ -83,6 +83,36 @@ const askDocumentDeclaration: FunctionDeclaration = {
 
 const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetingDeclaration, askDocumentDeclaration];
 
+// reminder tools: only offered when AURA_PROACTIVE_REMINDERS=1 on the server
+const REMINDER_DECLARATIONS: FunctionDeclaration[] = [
+  {
+    name: "set_reminder",
+    description:
+      "Start setting a reminder. Returns the exact day and time it resolved to and a reminderId. Read the day and time back to the user and ask them to confirm; nothing is set until confirm_reminder.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        what: { type: Type.STRING, description: "What to remind the user about, short (e.g. 'call Mom')." },
+        when: { type: Type.STRING, description: "When, in the user's words (e.g. 'tomorrow at 5pm', 'in 20 minutes', 'Friday 9am')." },
+      },
+      required: ["what", "when"],
+    },
+  },
+  {
+    name: "confirm_reminder",
+    description: "Set the reminder after the user clearly said yes to the day and time from set_reminder.",
+    parameters: { type: Type.OBJECT, properties: { reminder_id: { type: Type.INTEGER, description: "reminderId from set_reminder" } }, required: ["reminder_id"] },
+  },
+  {
+    name: "cancel_reminder",
+    description: "Drop a reminder: the user said no to the suggested time, or wants a reminder removed.",
+    parameters: { type: Type.OBJECT, properties: { reminder_id: { type: Type.INTEGER, description: "reminderId from set_reminder" } }, required: ["reminder_id"] },
+  },
+];
+
+/** Tells the inbox (components/Nudges) to reload now. */
+export const NUDGES_REFRESH = "aura:nudges-refresh";
+
 type ToolContext = {
   conversationId: number | null;
   onRecall: (query: string, results: Memory[]) => void;
@@ -128,6 +158,15 @@ async function runTool(name: string | undefined, args: any, ctx: ToolContext): P
         : "No meetings were recorded in that period.",
     };
   }
+  if (name === "set_reminder" || name === "confirm_reminder" || name === "cancel_reminder") {
+    const rid = Number(args?.reminder_id);
+    const r =
+      name === "set_reminder"
+        ? await api.post<Record<string, unknown>>("/api/proactive/reminders", { what: args?.what, when: args?.when, conversationId: ctx.conversationId })
+        : await api.post<Record<string, unknown>>(`/api/proactive/reminders/${rid}/${name === "confirm_reminder" ? "confirm" : "cancel"}`);
+    window.dispatchEvent(new Event(NUDGES_REFRESH));
+    return r;
+  }
   if (name === "ask_document") {
     if (!ctx.conversationId) return { found: false, answer: "No documents have been added to this conversation." };
     const question = String(args?.question || "");
@@ -161,6 +200,8 @@ export type UseLiveAPIResults = {
   messages: Message[];
   conversationId: number | null;
   sendText: (text: string) => Promise<void>;
+  /** ask a running voice session to say that a reminder is due; false when no session is connected */
+  announceReminder: (what: string) => boolean;
   newConversation: () => void;
   /** load a saved conversation and keep talking in it */
   continueConversation: (id: number) => Promise<void>;
@@ -190,6 +231,8 @@ type SetupResponse = {
   systemInstruction: string;
   memoryCount: number;
   webSearch: boolean;
+  /** reminder tools are available (AURA_PROACTIVE_REMINDERS=1) */
+  reminders?: boolean;
   /** languages for transcribing the user's speech ([] or missing = detect automatically) */
   languageCodes?: string[];
 };
@@ -513,8 +556,8 @@ export function useLiveAPI(): UseLiveAPIResults {
           inputAudioTranscription: languageOn.current ? { languageCodes } : {},
           outputAudioTranscription: {},
           tools: useSearch
-            ? [{ googleSearch: {} }, { functionDeclarations: TOOL_DECLARATIONS }]
-            : [{ functionDeclarations: TOOL_DECLARATIONS }],
+            ? [{ googleSearch: {} }, { functionDeclarations: setup.reminders ? [...TOOL_DECLARATIONS, ...REMINDER_DECLARATIONS] : TOOL_DECLARATIONS }]
+            : [{ functionDeclarations: setup.reminders ? [...TOOL_DECLARATIONS, ...REMINDER_DECLARATIONS] : TOOL_DECLARATIONS }],
           sessionResumption: handle ? { handle } : {},
           contextWindowCompression: { slidingWindow: {} },
         };
@@ -695,6 +738,23 @@ export function useLiveAPI(): UseLiveAPIResults {
     return () => clearInterval(t);
   }, [reading]);
 
+  // a reminder is due: AURA says it in its own voice (components/Nudges falls back to the browser's speech)
+  const announceReminder = useCallback(
+    (what: string) => {
+      if (status !== "connected") return false;
+      try {
+        client.send(
+          [{ text: `[AURA app] A reminder the user set is due now: "${what}". Tell the user right away in one short sentence, starting with "Reminder:". Don't call any tools for this.` }],
+          true
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [status, client]
+  );
+
   // tell a running session about a document once it has been read, so it can give an overview
   useEffect(() => {
     if (status !== "connected") return;
@@ -738,6 +798,7 @@ export function useLiveAPI(): UseLiveAPIResults {
     messages,
     conversationId,
     sendText,
+    announceReminder,
     newConversation,
     continueConversation,
     memoryCount,

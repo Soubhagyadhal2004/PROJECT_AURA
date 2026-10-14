@@ -7,7 +7,8 @@
   "main": "desktop/main.cjs",
   "dependencies": {
     "@google/genai": "^2.28.0",
-    "@huggingface/transformers": "^4.3.1"
+    "@huggingface/transformers": "^4.3.1",
+    "chrono-node": "2.10.1"
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c yellow,cyan \"npm:server\" \"npm:start\"",
@@ -16,7 +17,16 @@
     "build": "react-scripts build",
     "serve": "node server/index.mjs",
     "test": "react-scripts test",
-    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs",
+    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs server/tests/proactive.test.mjs",
+    "eval:gate": "node --no-warnings --import ./eval/lib/register.mjs eval/run-gate-sim.mjs",
+    "eval:gate:fix": "node --no-warnings --import ./eval/lib/register.mjs eval/run-gate-sim.mjs --extract-min-score 0",
+    "eval:retrieval": "node --no-warnings --import ./eval/lib/register.mjs eval/run-retrieval.mjs",
+    "eval:reach": "node --no-warnings --import ./eval/lib/register.mjs eval/run-reachability.mjs",
+    "eval:real": "node --no-warnings --import ./eval/lib/register.mjs eval/run-real.mjs",
+    "eval:all": "npm run eval:gate && npm run eval:gate:fix && npm run eval:retrieval && npm run eval:reach",
+    "eval:lme": "node --no-warnings --import ./eval/lib/register.mjs eval/run-longmemeval.mjs",
+    "eval:rescore": "node eval/rescore-real.mjs",
+    "eval:results": "node eval/build-results.mjs",
     "test:desktop": "node --test desktop/tests/server-process.test.cjs",
     "desktop": "npm run build && electron .",
     "desktop:start": "electron .",
