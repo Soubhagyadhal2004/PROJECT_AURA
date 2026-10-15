@@ -7,6 +7,7 @@
 \usepackage[export]{adjustbox}
 \usepackage[table]{xcolor}
 \usepackage{microtype}
+\usepackage[ruled,vlined,linesnumbered,noend]{algorithm2e}
 \usepackage[hyphens]{url}
 \usepackage{cite}
 \usepackage{hyperref}
@@ -15,6 +16,7 @@
 \@ifundefined{IEEEkeywords}{\newenvironment{IEEEkeywords}{\par\small\textbf{Index Terms---}}{\par}}{}
 \@ifundefined{IEEEauthorblockN}{\newcommand{\IEEEauthorblockN}[1]{#1\\}\newcommand{\IEEEauthorblockA}[1]{#1}}{}
 \makeatother
+\providecommand{\appendices}{\appendix}
 \input{numbers.tex}
 
 \newcommand{\aura}{AURA}
@@ -49,6 +51,10 @@ We study these questions in \aura, a local assistant with a SQLite memory store,
 \item We describe two small switches, a candidate selection that searches per sentence without a minimum score (F2) and a bounded re-proposal rule (F1), and evaluate them in an ablation in simulation and with two real Gemini models, including their cost. F2 carries the effect; F1 does not show a measurable benefit with real models (Sec.~\ref{sec:ablation}--\ref{sec:real}).
 \item We report an external check on LongMemEval knowledge-update questions and state clearly what it does and does not show (Sec.~\ref{sec:lme}), and we provide the harness, the personas generator and all raw results.
 \end{enumerate}
+A concrete case from our data (Sec.~\ref{sec:example}) shows the problem. A persona says ``I drive a Seltos'' in one session and, three sessions later, ``I sold my old car and bought a Swift.'' With default settings the extractor was shown neither the stored ``Seltos'' memory (the sentence is a poor match for it) nor a reason to look for it; it added ``bought a Swift'' as a new fact, and the outdated Seltos memory stayed active. The review gate never saw an update to approve. The same persona under the new selection produced the update, the user approved it, and the history was kept.
+
+The rest of the paper is organised as follows. Section~\ref{sec:related} places the work among related studies, Section~\ref{sec:system} describes the memory system, and Section~\ref{sec:method} the evaluation. Sections~\ref{sec:policies}--\ref{sec:lme} give results in the order policies, retrieval, reachability, ablation, real extractors and LongMemEval; Sections~\ref{sec:discussion}--\ref{sec:future} discuss implications, limits and future work.
+
 We deliberately keep claims narrow. The personas are synthetic and English, the real-model samples are small, the user is simulated, and no user study was run (Sec.~\ref{sec:threats}).
 
 \section{Related Work}
@@ -57,12 +63,60 @@ We deliberately keep claims narrow. The personas are synthetic and English, the 
 
 \textbf{Updating and governing memory.} Lam et al.\ propose a governance framework (SSGM) that separates memory updates from task execution and applies consistency checks and permission controls before anything is stored \cite{lam2026ssgm}. Patel studies the \emph{memory-update gap}, the loss of accuracy on questions about facts that changed, and addresses it by reinforcement-learning fine-tuning of a small model \cite{patel2026supersede}. Xiong et al.\ show that adding and deleting stored experiences changes agent behaviour and that errors can compound through retrieval \cite{xiong2025memory}, and Xiao et al.\ find that errors entering through memory updates persist longer than errors entering through user questions \cite{xiao2026errors}. Zhang et al.\ place a learned gate between memory store and model that decides which \emph{retrieved} memories are admitted \cite{zhang2026memgate}. Our setting differs in three ways: the gate here is a user decision on \emph{writes}, the problem we isolate is upstream of the gate (what the extractor can see), and the remedy is inference-time candidate selection rather than training. Chu surveys security threats to agents across layers and notes that current benchmarks rarely test failures that span sessions \cite{chu2026survey}.
 
+\textbf{Positioning.} Table~\ref{tab:related} summarises what each cited line of work studies, as far as the abstract pages show. Two observations motivate the present study: update-related failures are reported as a problem for agent memory \cite{patel2026supersede,xiao2026errors}, and governance proposals add checks on the write path \cite{lam2026ssgm}, but a measurement of how a write-time user gate interacts with the \emph{visibility} of the memory to be changed is, to our knowledge, not among them. We cannot exclude that such a measurement exists elsewhere.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{What the cited works study (from their abstracts).}
+\label{tab:related}
+\adjustbox{max width=\linewidth}{\begin{tabular}{p{0.34\linewidth}p{0.62\linewidth}}
+\toprule
+Work & Focus \\
+\midrule
+Mem0 \cite{chhikara2025mem0} & extraction, consolidation and retrieval of conversation facts; evaluated on LoCoMo \\
+LoCoMo \cite{maharana2024locomo} & very long agent conversations; QA, summarisation, multimodal tasks \\
+LongMemEval \cite{wu2024longmemeval} & five memory abilities, among them updated facts; indexing--retrieval--reading split \\
+SSGM \cite{lam2026ssgm} & governance framework: consistency checks and permission controls before storing \\
+Supersede \cite{patel2026supersede} & accuracy loss on changed facts; reinforcement-learning environment \\
+Xiong et al.\ \cite{xiong2025memory} & effect of adding and deleting experiences; error compounding \\
+Xiao et al.\ \cite{xiao2026errors} & how memory-update errors propagate over turns \\
+MemGate \cite{zhang2026memgate} & learned gate over retrieved memories \\
+Chu \cite{chu2026survey} & survey of agent security threats by layer \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
 \textbf{Scope.} The works above were read at the level of their arXiv abstract pages for this paper, not in full; their detailed claims should be checked before they are relied upon. We make no claim about priority over any of them.
 
 \section{System: User-Controlled Memory in \aura}
 \label{sec:system}
 \subsection{Memory store and operations}
 \aura\ keeps memories in SQLite. A memory has text, a category (preference, personal, people, work, plan, other), a status (\texttt{active}, \texttt{superseded} or \texttt{outdated}), a pointer to the memory that replaced it, a source and its conversation, and timestamps. After each user message a Gemini model (default \texttt{gemini-3.5-flash-lite}) receives the message and a list of candidate memories and returns operations: \emph{add}, \emph{update} (replace a value), \emph{retire} (the fact no longer holds), or \emph{forget}. An update keeps the old row as \texttt{superseded} with a link to its successor; retire marks the old row \texttt{outdated}. The extractor can refer only to memory identifiers that appear in its prompt.
+
+\subsection{Data model}
+Table~\ref{tab:model} lists the fields that matter for the evaluation. Nothing is overwritten in place by an update: the old row stays with status \texttt{superseded} and points to its successor, so every change can be audited and, if needed, reversed by the user.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Memory and proposal records.}
+\label{tab:model}
+\adjustbox{max width=\linewidth}{\begin{tabular}{lp{0.64\linewidth}}
+\toprule
+Field & Meaning \\
+\midrule
+\texttt{content} & one third-person sentence, with date context for time-bound facts \\
+\texttt{category} & preference, personal, people, work, plan, other \\
+\texttt{status} & \texttt{active}, \texttt{superseded} (replaced), \texttt{outdated} (no longer true) \\
+\texttt{superseded\_by} & identifier of the replacing memory \\
+\texttt{source}, conversation & where the fact came from \\
+proposal: action & \texttt{update}, \texttt{retire} or \texttt{forget} \\
+proposal: status & \texttt{pending}, \texttt{accepted}, \texttt{rejected} (with decision time) \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Extraction prompt}
+After each batch of new user messages the extractor receives the date, the candidate memories as lines of the form \texttt{[id] (category) text}, optional earlier context and the new messages. The instructions tell it to store only what the \emph{user} said or confirmed (preferences, personal details, people, work, plans, routines), not questions, general knowledge, assistant suggestions or one-off requests, to write one short third-person sentence per fact, and to choose among the four operations. The output is constrained to a JSON schema with the fields action, memory\_id, content and category. An operation that names an identifier that was not in the candidate list is ignored by the application. This is the point at which candidate selection limits what can change.
 
 \subsection{The review gate}
 When ``ask before changing memories'' is on (the default), \emph{add} operations are applied directly and every operation that touches an existing memory becomes a stored \emph{proposal} (action, target memory, proposed text, conversation). The user accepts or rejects it; nothing changes until then. We call this policy \textbf{gate}. The comparison policies are \textbf{append} (only additions; a changed fact is stored as a second fact), \textbf{auto} (all operations applied at once), and \textbf{gate\,all} (also new facts wait for approval; emulated in the harness, not an \aura\ setting).
@@ -78,8 +132,24 @@ The prompt contains candidate memories chosen from the store. By default these a
 \end{itemize}
 Using F2 enlarges the prompt (Sec.~\ref{sec:cost}); the minimum score exists to keep unrelated memories out (Fig.~\ref{fig:threshold}).
 
+\begin{algorithm}[t]
+\caption{Candidate selection (modes \emph{default} and \emph{adaptive})}
+\label{alg:cand}
+\small
+\KwIn{user text $x$, mode, store, minimum score $\tau=0.25$}
+\KwOut{candidate memories shown to the extractor}
+$f \leftarrow 0$ if mode is no-minimum or adaptive, else $\tau$\;
+\eIf{mode is sentence or adaptive}{
+  $k \leftarrow 24$ if mode is adaptive and $x$ contains a change cue, else $12$\;
+  \ForEach{$q \in \{x\} \cup \mathrm{sentences}(x)$}{
+    \ForEach{memory $m$ in $\mathrm{search}(q, k, f)$}{keep the best score per memory\;}}
+  $R \leftarrow$ the $k$ memories with the best scores\;
+}{$R \leftarrow \mathrm{search}(x, 12, f)$\;}
+\Return $R \cup$ the 8 most recent memories\;
+\end{algorithm}
+
 \subsection{Re-proposal (F1)}
-A rejected proposal normally ends the matter. With F1 a rejected change may be proposed again, at most $N$ times, but only after the user has said something new about it (we use $N=2$). The aim is to recover from a rejection that was a slip without nagging the user.
+A rejected proposal normally ends the matter. With F1 a rejected change may be proposed again, at most $N$ times, but only after the user has said something new about it (we use $N=2$). The aim is to recover from a rejection that was a slip without nagging the user. Concretely, when the extractor repeats a rejected change, the application compares the time of the last user message with the time of the last rejection and creates a new proposal only if the user has written since and the number of earlier rejections is at most $N$. An identical proposal that is still pending is never duplicated, and a newer proposal for the same memory replaces an older pending one.
 
 \section{Evaluation Method}
 \label{sec:method}
@@ -103,16 +173,28 @@ Conversations & scripted personas & same personas \\
 \end{table}
 
 \subsection{Personas and ground truth}
-A persona has 8 of 12 fact types (city, employer, dog, sister, diet, gym time, language, car, project, coffee, hobby, birthday) and five sessions of about \userTurnsPersona\ user turns. Facts are stated, later updated (``I've just moved to Hyderabad''), retired (``I stopped going to the gym''), forgotten on request, repeated, and mixed with distractors that must not become memories (hypotheticals, questions, assistant suggestions, facts about friends). A store starts with 30 unrelated true background facts and gains 10 between sessions, imitating earlier use. The true state is known after every turn. In the ablation runs a restating turn (``Like I said, \ldots'') follows each update, which is what F1 needs to act on.
+A persona has 8 of 12 fact types (city, employer, dog, sister, diet, gym time, language, car, project, coffee, hobby, birthday) and five sessions of about \userTurnsPersona\ user turns. Facts are stated, later updated (``I've just moved to Hyderabad''), retired (``I stopped going to the gym''), forgotten on request, repeated, and mixed with distractors that must not become memories (hypotheticals, questions, assistant suggestions, facts about friends). A store starts with 30 unrelated true background facts and gains 10 between sessions, imitating earlier use. The true state is known after every turn. Table~\ref{tab:persona} lists one persona in full; it is used again in the worked example (Sec.~\ref{sec:example}).
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Persona 1 of the real-model runs: what the user says in each session, and the true state at the end.}
+\label{tab:persona}
+\input{tables/example_persona.tex}
+\end{table}
+
+In the ablation runs a restating turn (``Like I said, \ldots'') follows each update, which is what F1 needs to act on.
 
 \subsection{Simulated extractor and user}
 The simulated extractor returns what a correct model would return for the turn, using only the memories shown in the prompt; a change whose target is not shown becomes an add, as a real model would do. Errors are injected at rate $e$: a correct operation is dropped, a distractor becomes a false memory, or a true memory shown to the model is retired or overwritten with a false value. All policies face the same random draws. The simulated user reviews proposals at the end of a session, accepts correct ones and rejects wrong ones, and errs with probability $u$ (default 0.05).
 
+\subsection{Scoring rules}
+Memories written by a model are scored by the \emph{values} they mention (for example ``Pune'', ``Swift'', ``6 am''), using the persona's slots and a list of alternative wordings. A memory mentioning a value that is true at the end is \emph{true}. One that mentions a value the user gave earlier and that is no longer true is \emph{stale}, unless it records that the fact ended (``finished the project and is between projects'', after a retire request), which is \emph{ended} and counted as correct. A memory about a distractor value is \emph{hypothetical} when it is worded as a hypothetical, \emph{third-party} when it concerns another person (allowed), and \emph{false} otherwise. A memory that mentions no known value is \emph{other}. The exact lists are given in Appendix~\ref{app:scoring}.
+
 \subsection{Metrics}
-\textbf{F1} compares the persona's active memories with the true facts. \textbf{Stale} counts active memories holding a value the user gave earlier that is no longer true. \textbf{False} counts active memories the user never stated about themselves. \textbf{Destroyed} counts true memories, persona and background, that ended up superseded, outdated or deleted by a wrong change; F1 does not see the background memories, so this is the safety metric. \textbf{Prompts/100} is the number of review cards per 100 user turns. \textbf{Reachability} is the share of change requests whose target memory is among the extractor's candidates. \textbf{Prompt tokens} are summed over a persona run.
+\textbf{F1} compares the persona's active memories with the true facts. \textbf{Stale} counts active memories holding a value the user gave earlier that is no longer true. \textbf{False} counts active memories the user never stated about themselves. \textbf{Destroyed} counts true memories, persona and background, that ended up superseded, outdated or deleted by a wrong change; F1 does not see the background memories, so this is the safety metric. \textbf{Prompts/100} is the number of review cards per 100 user turns. \textbf{Reachability} is the share of change requests whose target memory is among the extractor's candidates. \textbf{Prompt tokens} are summed over a persona run. With $T$ the set of persona facts that are true at the end, $A$ the set of active persona memories scored true or ended, and $P$ the set of all active persona memories, precision is $|A|/|P|$, recall is the share of $T$ covered, and F1 their harmonic mean. \textbf{Exact state} is 1 for a persona whose final memory has every true fact, no stale and no false fact, and 0 otherwise.
 
 \subsection{Real-model runs and scoring}
-Real runs use Gemini as the extractor for 12 personas, one seed, with the simulated user as an oracle ($u=0$), for the policies auto and gate and four variants (baseline, F1, F2, F1+F2). They were repeated for baseline and F1+F2 with a second model (\texttt{gemini-3.1-flash-lite}). Because models word memories freely, a memory is scored by value: the automatic scorer maps each active memory to a persona fact and a label (true, stale, ended, hypothetical, third party, other). The author hand-labelled every memory of the baseline and F1+F2 runs (\agrBaseN\ and \agrBothN\ memories). There were \realExtractions\ extraction calls and \realExtractionErrors\ failed.
+Real runs use Gemini as the extractor for 12 personas, one seed, with the simulated user as an oracle ($u=0$), for the policies auto and gate and four variants (baseline, F1, F2, F1+F2). They were repeated for baseline and F1+F2 with a second model (\texttt{gemini-3.1-flash-lite}). Because models word memories freely, a memory is scored by value: the automatic scorer maps each active memory to a persona fact and a label (true, stale, ended, hypothetical, third party, other). The author hand-labelled every memory of the baseline and F1+F2 runs (\agrBaseN\ and \agrBothN\ memories). There were \realExtractions\ extraction calls and \realExtractionErrors\ failed. Requests were rate-limited (12 per minute), each persona was played in its own isolated database, and the extractor was the only part of the system that called the model; the reviewing user was the oracle described above and judged a proposal by the same value-based rules as the scorer. This has a consequence that we discuss with an example (Sec.~\ref{sec:example}): the oracle can reject a correct proposal whose wording the rules do not recognise.
 
 \subsection{Statistics}
 Differences between variants are paired by persona and seed. We report the mean difference with a 95\% bootstrap interval (4000 resamples, fixed seed) and an exact two-sided sign test on the non-tied pairs. No correction for multiple tests is applied; the tests run are \simTests\ (simulated ablation) and \realTests\ (real runs), so isolated $p$-values near 0.03 should not be read as findings. Reachability is reported with Wilson intervals \cite{wilson1927}, and agreement between hand and automatic labels with Cohen's $\kappa$ \cite{cohen1960}; since there is a single annotator this measures the scorer against the annotator, not human--human agreement.
@@ -139,6 +221,15 @@ Fig.~\ref{fig:policies} and Table~\ref{tab:policies} compare the four policies o
 
 \textbf{Missed updates.} The gate does not help here. At $e=0$ the append-only policy leaves \appendStaleEZero\ stale facts per persona by construction, and the gate still leaves 1.80, slightly more than auto-apply (1.57); across the error sweep the gate leaves between 1.8 and 2.2 stale facts, auto-apply between 1.6 and 1.9. F1 of the gate is below auto-apply at $e=0$ (0.854 vs.\ 0.881) and about equal at higher $e$. The gate thus buys safety at a small cost in F1, and does nothing for stale facts.
 
+\textbf{Earlier evidence for the candidate bottleneck.} An earlier run of the same simulation (without restating turns) already pointed at candidate selection: removing the 0.25 minimum score from the extractor's candidate search, and nothing else, roughly halved the stale facts left at low error rates under both auto-apply and the gate (Fig.~\ref{fig:fix}). That a change in how candidates are chosen moves the stale count far more than the choice between gate and auto-apply is what prompted the reachability analysis below.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig2_candidate_fix.pdf}
+\caption{Stale facts left active, as shipped versus candidate search without the minimum score (earlier simulation run, no restating turns).}
+\label{fig:fix}
+\end{figure}
+
 \textbf{User slips.} Table~\ref{tab:slip} varies the simulated user's slip rate at $e=0.1$. F1 falls from \slipFZero\ to \slipFThree\ and stale facts rise from \slipStaleZero\ to \slipStaleThree\ as $u$ goes from 0 to 0.3: a gate is only as good as the review.
 
 \begin{table}[t]
@@ -147,6 +238,44 @@ Fig.~\ref{fig:policies} and Table~\ref{tab:policies} compare the four policies o
 \label{tab:slip}
 \adjustbox{max width=\linewidth}{\input{tables/slip.tex}}
 \end{table}
+
+\section{Results: Does Memory Search Find the Right Memory?}
+\label{sec:retrieval}
+Candidate selection builds on memory search, so we first measured search alone. Each store holds one persona's current facts plus $N\in\{25,100,350\}$ unrelated facts; every stored fact is asked about with two natural questions (``Which company do I work for?''), \retrQueries\ queries in all over 20 personas and 3 seeds. A query is a hit when the right memory is among the top six results. We compare AURA's hybrid score with the 0.25 minimum, the same score without a minimum, embeddings only and keywords only (the fallback used when the embedding model is unavailable). A check that re-scoring reproduces AURA's real top-six lists succeeded for all queries (differences only from ties).
+
+\begin{table}[t]
+\centering\small
+\caption{Retrieval: share of questions whose answer memory is in the top six.}
+\label{tab:retr}
+\adjustbox{max width=\linewidth}{\input{tables/retrieval.tex}}
+\end{table}
+
+Table~\ref{tab:retr} shows that AURA's search finds the right fact for only \retrAuraHit\ of the questions at $N=350$ and returns nothing at all for \retrAuraEmpty, while the same score without a minimum reaches \retrNominHit. The cause is visible in the scores: for \retrBelowMin\ of the questions the right fact scores below 0.25 on the hybrid score, because a natural question about a fact (``What do I do for fun?'') shares few words and only moderate embedding similarity with the stored sentence (``The user's main hobby is chess'').
+
+\begin{table}[t]
+\centering\small
+\caption{Retrieval by kind of fact at $N=350$ (hit@6; mean cosine similarity of the right fact).}
+\label{tab:retrslot}
+\adjustbox{max width=\linewidth}{\input{tables/retr_slot.tex}}
+\end{table}
+
+The failure is concentrated in a few kinds of fact (Table~\ref{tab:retrslot}). Facts with a distinctive topic word (dog, sister, birthday, coffee, language) are found almost always; facts that people phrase in many ways or that name no topic word (city, employer, diet, car) are often not found with the 0.25 minimum, although the no-minimum search finds most of them.
+
+\begin{table}[t]
+\centering\small
+\caption{Minimum score trade-off: found / noise for $N$ and minimum score. Found: share of stored-fact questions answered; noise: share of never-stated questions that still return memories.}
+\label{tab:thr}
+\adjustbox{max width=\linewidth}{\input{tables/threshold.tex}}
+\end{table}
+
+The minimum score is there for a reason. Table~\ref{tab:thr} and Fig.~\ref{fig:threshold} show the trade-off: lowering it raises the share of stored facts found but also the share of questions about things the user never said that still return memories (noise), up to 1.00 with no minimum. A single threshold therefore has to compromise between recall and silence, and at 0.25 AURA returns something for about half of the never-stated questions at $N=350$ while finding only 0.70 of the stored ones. For a conversational recall tool this may be tolerable; for the extractor, whose job is to see the memory it must change, it is a bottleneck.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig4_threshold_tradeoff.pdf}
+\caption{Retrieval trade-off of the minimum score: share of stored facts found in the top six versus share of never-stated questions that still return memories. Circled: AURA's 0.25.}
+\label{fig:threshold}
+\end{figure}
 
 \section{Results: What the Extractor Can See}
 \label{sec:reach}
@@ -168,7 +297,7 @@ For each of \reachStores\ stores per size we generated update, retire and forget
 
 Reachability falls from \reachZero\ with an empty store to \reachLast\ at $N=350$ (Fig.~\ref{fig:reach}, Table~\ref{tab:reach}). Even with an empty store about one change in ten is out of reach because the 0.25 minimum drops weak matches. Without the minimum the figure is \reachLastNoMin\ at $N=350$. The recent-memory slots help only at small $N$.
 
-Table~\ref{tab:modes} compares the modes, with the mean number of candidates in parentheses. When the change shares the message with two unrelated sentences, which is common in natural conversation, default selection reaches only \mixedDefault\ of changes at $N=350$, because the embedding of the whole message is dominated by the unrelated content. Removing the minimum score gives \mixedNomin; per-sentence search alone \mixedSentence; and the adaptive mode \mixedAdaptive, at \candAdaptive\ candidates on average instead of \candDefault. Per-sentence search makes a mixed message behave like a single sentence. The minimum score is not free to remove, because it also suppresses unrelated matches (Fig.~\ref{fig:threshold}), and a larger prompt costs tokens.
+Table~\ref{tab:modes} compares the modes, with the mean number of candidates in parentheses. When the change shares the message with two unrelated sentences, which is common in natural conversation, default selection reaches only \mixedDefault\ of changes at $N=350$, because the embedding of the whole message is dominated by the unrelated content. Removing the minimum score gives \mixedNomin; per-sentence search alone \mixedSentence; and the adaptive mode \mixedAdaptive, at \candAdaptive\ candidates on average instead of \candDefault. Per-sentence search makes a mixed message behave like a single sentence. The minimum score is not free to remove, because it also suppresses unrelated matches (Table~\ref{tab:thr}), and a larger prompt costs tokens.
 
 \begin{table}[t]
 \centering\small
@@ -177,12 +306,30 @@ Table~\ref{tab:modes} compares the modes, with the mean number of candidates in 
 \adjustbox{max width=\linewidth}{\input{tables/modes.tex}}
 \end{table}
 
-\begin{figure}[t]
+\textbf{By kind of change.} Table~\ref{tab:reachkind} splits the result at $N=350$ by update, retire and forget requests. Retire and forget requests are reached more often than updates by the default selection in single-sentence turns, but all three suffer in mixed turns, and the adaptive mode restores them to a similar level. (Single-sentence turns have one sentence, so the sentence mode equals the default there by construction.)
+
+\begin{table}[t]
+\centering\small
+\caption{Reachability by kind of change at $N=350$.}
+\label{tab:reachkind}
+\adjustbox{max width=\linewidth}{\input{tables/reach_kind.tex}}
+\end{table}
+
+\textbf{By kind of fact.} The aggregate hides large differences (Table~\ref{tab:reachslot}, Fig.~\ref{fig:slots}). For single-sentence changes at $N=350$ the default selection reaches the car in only \carDefault\ of cases, the employer in \employerDefault\ and the city in \cityDefault; the adaptive mode raises these to \carAdaptive, \employerAdaptive\ and \cityAdaptive. The car case is the one in our worked example. The city remains the weakest even with F2: a statement such as ``We relocated to Pune last month'' contains no word that points to the old city, and with 350 other memories the right one is often not among the 24 best matches. F2 is therefore an improvement, not a complete solution, and a store with many place-like facts will need better candidate selection than ours.
+
+\begin{table}[t]
+\centering\small
+\caption{Reachability by kind of fact at $N=350$ (single-sentence changes).}
+\label{tab:reachslot}
+\adjustbox{max width=\linewidth}{\input{tables/reach_slot.tex}}
+\end{table}
+
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig4_threshold_tradeoff.pdf}
-\caption{Retrieval trade-off of the minimum score: share of stored facts found in the top six versus share of never-stated questions that still return memories. Circled: \aura's 0.25.}
-\label{fig:threshold}
-\end{figure}
+\includegraphics[width=\textwidth]{fig8_slots.pdf}
+\caption{Share of change requests whose target memory is shown to the extractor, by kind of fact ($N=350$, single-sentence changes, 4 selection modes).}
+\label{fig:slots}
+\end{figure*}
 
 \section{Results: Ablation of the Two Switches}
 \label{sec:ablation}
@@ -238,6 +385,60 @@ Table~\ref{tab:real1} and Fig.~\ref{fig:real} give the same ablation with a real
 
 \textbf{Other effects.} Under auto-apply the F2-only variant stored \falseAutoTwoA\ false facts across 12 personas where the baseline stored none, and F1+F2 stored none again; with these counts we cannot say whether this is an effect of F2 or noise.
 
+\subsection{Per-persona results}
+Table~\ref{tab:perpersona} lists every persona of the first model under the gate. With the baseline selection, \personasStaleBase\ of 12 personas ended with at least one stale fact and \personasMissBase\ had at least one change target missing from the prompt; with F1+F2 none did. Persona 9 has the same F1 under both settings. Persona 3 has a lower F1 under F1+F2 because the model stored one more hypothetical sentence (``would like to live in Goa someday''), which lowers precision; none of its updates is wrong, so this is not a regression in updating.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Per-persona results, first model, gate policy. Missed targets: change turns whose target memory was not in the prompt.}
+\label{tab:perpersona}
+\adjustbox{max width=\linewidth}{\input{tables/perpersona.tex}}
+\end{table}
+
+\subsection{A worked example}
+\label{sec:example}
+Persona 1 (Table~\ref{tab:persona}) is a typical case. Table~\ref{tab:decbase} shows the proposals made under the baseline, Table~\ref{tab:membase} the final memories, and Tables~\ref{tab:decboth} and~\ref{tab:memboth} the same under F1+F2. Under the baseline the extractor updated the gym time, the city (twice) and forgot the birthday, but it never proposed to replace ``drives a Seltos''; the user's ``I sold my old car and bought a Swift'' became a separate fact (``bought a Swift car'') and the Seltos memory remained active and stale. The one change target missing from the baseline prompt on this persona is consistent with this. A further proposal, replacing the project memory by ``currently between projects'', was rejected by the oracle reviewer. Under F1+F2 the same persona produced the car update, and the project memory was replaced by an ``ended'' record that was accepted.
+
+The rejected proposal shows a limitation of our reviewer. The oracle judges proposals with the same value-based rules as the scorer, and a correct paraphrase can be rejected when the rules do not recognise its wording. In the baseline run this happened once for this persona; the final memory then still holds the old project memory, which the scorer rightly counts as stale. We therefore treat the oracle as an approximation of a careful user, not as one.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Persona 1, baseline: proposals under the gate.}
+\label{tab:decbase}
+\adjustbox{max width=\linewidth}{\input{tables/dec_base.tex}}
+\end{table}
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Persona 1, baseline: final persona memories.}
+\label{tab:membase}
+\adjustbox{max width=\linewidth}{\input{tables/example_base.tex}}
+\end{table}
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Persona 1, F1+F2: proposals under the gate.}
+\label{tab:decboth}
+\adjustbox{max width=\linewidth}{\input{tables/dec_both.tex}}
+\end{table}
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Persona 1, F1+F2: final persona memories.}
+\label{tab:memboth}
+\adjustbox{max width=\linewidth}{\input{tables/example_both.tex}}
+\end{table}
+
+\subsection{Cost in requests, tokens and time}
+Table~\ref{tab:cost} gives the cost per persona. The number of requests is the same (one extraction per user turn); prompt tokens grow by about \tokInc\% because more candidates are listed; output tokens are unchanged. Measured time per request is not a reliable cost measure here: it changed from \latBaseA\ s to \latBothA\ s with the first model but from \latBaseB\ s to \latBothB\ s with the second, which indicates that API load during the runs, not the prompt size, dominated.
+
+\begin{table}[t]
+\centering\small
+\caption{Cost per persona (gate policy; means over 12 personas).}
+\label{tab:cost}
+\adjustbox{max width=\linewidth}{\input{tables/cost.tex}}
+\end{table}
+
 \subsection{Scorer validity}
 Table~\ref{tab:agree} shows the agreement of the automatic labels with the author's hand labels. Three of \agrBaseN\,+\,\agrBothN\ memories differ; in all three the automatic scorer labelled a correct statement of unemployment or finished project as ``ended'' or ``other'' while the annotator judged it true, so the automatic F1 is, if anything, slightly conservative on these three. These labels were kept as annotated. Since the scorer and the labels share one author and the same persona rules, the agreement shows consistency, not independence.
 
@@ -274,17 +475,83 @@ Table~\ref{tab:lme} and Fig.~\ref{fig:lme} show that the gate system improves fr
 
 \textbf{Design implications.} (i) Report reachability alongside accuracy for any extractor-based memory. (ii) Search per sentence rather than per message when messages are mixed. (iii) Treat the minimum score as a trade-off: the unfiltered selection raises reachability (\reachLastNoMin\ at $N=350$) but admits unrelated memories, so the price of F2 is a larger prompt. (iv) Budget for more prompt tokens (about \tokInc\%) and slightly more review cards.
 
+\textbf{What the gate is for.} The gate is a user-control mechanism as much as a safety mechanism. Every change to what the assistant believes about a person passes a visible decision, old values remain as history, and forgetting is an explicit operation that removes the memory. Our results show what this buys (protection against wrong writes) and what it costs (20--33 prompts per 100 turns in simulation, a little more with F2). They also show a limit: the gate's protection is only as good as the user's attention (Table~\ref{tab:slip}), and adding prompts can lower that attention. Whether F2's additional prompts, which are mostly correct updates, are better tolerated than the baseline's is an empirical question for a user study.
+
+\textbf{Why the missed-update problem is easy to overlook.} A missed update does not produce an error message, a wrong answer on the turn it occurs, or a prompt. It surfaces later, when the assistant states an outdated fact. Evaluations that look at single-turn extraction, or at accuracy of what is written, will not see it; measuring the final memory state against the true state, as we do, does.
+
+\textbf{Choosing between larger prompts and better search.} F2 enlarges the prompt by about a third. Alternatives are a better retriever (for example a cross-encoder or a learned relevance gate over candidates, as in \cite{zhang2026memgate} for retrieval), a second extraction pass over the \emph{whole} store for messages with a change cue, or a structured memory with typed slots in which an update names its slot. We did not evaluate these; the point of F2 is that a small, inexpensive change already removes most misses in our setting, and that reachability is a quantity worth tracking whichever remedy is chosen.
+
 \textbf{On F1.} Letting a rejected change return only after new user input is cheap and conceptually neat, but we found no benefit with real models (the oracle user rejected no correct change in these runs), and only small, uncorrected-significance effects in simulation. Its value would have to be shown with real users who slip.
 
 \section{Threats to Validity}
 \label{sec:threats}
 \textbf{Synthetic and English personas.} Personas, distractors and the wording of changes were written by the system's author. The change cues of F2 were designed after the reachability failures were seen on the same generator, so F2 may be tuned to it; the LongMemEval check is the only independent text and is small. \textbf{Small real samples.} 12 personas, one seed per cell and two models of the same family; exact sign tests with 12 pairs cannot resolve small effects, and several F1 results are inconclusive rather than null. \textbf{Simulated user.} The real runs use a perfect reviewer, the simulations a random slip. Real users may ignore, batch or rubber-stamp prompts; whether additional prompts are tolerated is open. No user study was done. \textbf{Single annotator and scorer.} Labels come from the author. \textbf{One embedding model.} Reachability depends on MiniLM and the 0.25 threshold. \textbf{LongMemEval.} Thirty questions, a judge that is not the official prompt, an oracle reviewer, and a single seed. \textbf{Multiple tests.} Reported as counts; only the large effects are robust to correction. \textbf{Related work.} Sources were read at abstract level.
 
+\section{Future Work}
+\label{sec:future}
+\textbf{User study.} The most important missing piece is a study with real users that measures how often they approve, reject or ignore proposals, whether they slip, and whether the extra prompts from F2 are tolerated. \textbf{Better candidate selection.} The city case (Table~\ref{tab:reachslot}) shows that sentence search with a larger candidate set is not enough when a statement contains no word that points to the old value; slot-typed memories or a second pass are candidates. \textbf{Other languages and models.} All personas are English and both extractors are Gemini models. \textbf{Bigger real samples.} More personas, more seeds, and all 78 LongMemEval knowledge-update questions would turn several inconclusive results into findings. \textbf{Proactive use of memory.} \aura\ also contains an optional layer that asks the user whether a stored fact is still true, sends reminders and prepares briefings; its checks use the same proposal path as the gate. We did not evaluate it and make no claim about it here.
+
 \section{Conclusion}
 A review gate on memory changes is effective against the errors it can see: in our experiments it removes almost all of the true facts that automatic application destroys. It does not address updates the extractor never proposes, and in a retrieval-based design these are governed by which memories the extractor is shown. Showing candidates by sentence, without a minimum score and with a larger set on a change cue, removed all observed misses for two real Gemini models and removed the stale facts, at roughly a third more prompt tokens and no significant increase in review prompts, while an external check on LongMemEval pointed in the same direction without reaching significance. The practical lesson for user-controlled memories is to measure and report what the extractor can reach. Evaluating with real users, in other languages and with larger real samples is the necessary next step; the evaluation code and every raw result file are provided so that others can repeat and extend it.
 
 \section*{Data and Code Availability}
 The evaluation harness (\texttt{eval/}), the persona generator, all raw per-run files and the scripts that produce every table and figure of this paper (\texttt{eval/make\_paper\_assets.py}) are in the \aura\ project repository. Numbers in the text are generated from the result folders.
+
+\appendices
+\section{Scoring Rules and Labels}
+\label{app:scoring}
+\textbf{Value matching.} Each persona slot has a set of possible values (for example the gym slot has ``6 am'', ``7 am'', ``6 pm'', ``8 pm''), each with alternative spellings (``6am'', ``6:00 am'', ``18:00''); birthdays accept ``12 March'', ``March 12'', ``12th March'' and so on; coffee values accept ``black coffee'' or ``oat milk''. A value is matched as a whole word, case-insensitively. Distractor values (a hypothetical city, a friend's car) have their own matchers.
+
+\textbf{Wording of third parties, hypotheticals and ended facts.} A memory that mentions only a distractor value is \emph{third-party} if it contains a word for a relative, friend, colleague or neighbour, \emph{hypothetical} if it contains ``if'', ``would'' or ``hypothetical'', and \emph{false} otherwise. A memory about a retired fact is \emph{ended} if it contains a phrase such as ``no longer'', ``finished'', ``wrapped up'', ``between projects'', ``stopped'', ``sold'', ``unemployed'' or ``not working'' and the fact was retired but not asked to be forgotten. A fact that the user asked to forget and that is still stored counts as \emph{stale}.
+
+\textbf{Annotation protocol.} For every memory in the baseline and F1+F2 real runs the annotator saw the persona's sessions, the true final state and the memory text, and wrote one of seven labels (true, ended, stale, false, hypothetical, third-party, other), looking at the automatic label only afterwards where possible. The automatic and the hand label were then compared (Table~\ref{tab:agree}).
+
+\section{Complete Policy Results}
+Table~\ref{tab:apppol} gives all metrics of the policy comparison for all error rates.
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{All policies, all extractor error rates (simulated, $u=0.05$; mean per persona).}
+\label{tab:apppol}
+\adjustbox{max width=\linewidth}{\input{tables/app_policies.tex}}
+\end{table*}
+
+\section{Complete Ablation Results}
+Tables~\ref{tab:appgate} and~\ref{tab:appauto} give every cell of the simulated ablation. An asterisk marks a sign-test $p<0.05$ against the baseline (uncorrected; 210 tests in all). The upper three blocks vary the extractor error rate ($u=0.05$), the lower four the user slip rate ($e=0.1$; gate only).
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Ablation, gate policy: all cells (60 paired persona runs each). * : uncorrected $p<0.05$.}
+\label{tab:appgate}
+\adjustbox{max width=\linewidth}{\input{tables/app_abl_gate.tex}}
+\end{table*}
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Ablation, auto-apply policy: error-rate cells (60 paired persona runs each). * : uncorrected $p<0.05$.}
+\label{tab:appauto}
+\adjustbox{max width=\linewidth}{\input{tables/app_abl_auto.tex}}
+\end{table*}
+
+\section{Reachability for All Store Sizes}
+Table~\ref{tab:modesfull} gives reachability and mean candidate count for all selection modes, store sizes and turn types.
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Reachability (mean number of candidates) by mode, store size $N$ and turn type.}
+\label{tab:modesfull}
+\adjustbox{max width=\linewidth}{\input{tables/modes_full.tex}}
+\end{table*}
+
+\section{Reproducing the Results}
+All commands are run from the repository root. Simulated experiments need no API key; real-model experiments need \texttt{GEMINI\_API\_KEY} and internet access.
+\begin{itemize}\setlength\itemsep{0pt}
+\item \texttt{npm run eval:gate}, \texttt{eval:retrieval}, \texttt{eval:reach}: policies, retrieval, reachability;
+\item \texttt{npm run eval:gate -- --errors 0,0.1,0.2 --policies auto,gate --restate 1 --candidates adaptive --repropose 2 --out eval/results/ablation/both} (and the three other variants), then \texttt{npm run eval:compare} for the paired statistics;
+\item \texttt{npm run eval:real -- --yes}: real-model runs (twelve personas, four variants, one folder each); \texttt{npm run eval:rescore}: scoring and annotation sheet;
+\item \texttt{npm run eval:lme -- --yes}: LongMemEval subset; \texttt{npm run eval:compare-lme};
+\item \texttt{python eval/make\_paper\_assets.py --root eval --out paper}: every table, number macro and the real-run and LongMemEval figures of this paper.
+\end{itemize}
 
 \ifdefined\HAVEIEEE\bibliographystyle{IEEEtran}\else\bibliographystyle{unsrt}\fi
 \bibliography{references}
