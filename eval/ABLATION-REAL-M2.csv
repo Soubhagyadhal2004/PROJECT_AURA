@@ -1,0 +1,13 @@
+variant,sweep,policy,e,u,metric,pairs,base,variantMean,diff,lo,hi,signP
+both,,auto,,,f1,12,0.83958,0.892399,0.052819,0.030667,0.075665,0.011719
+both,,auto,,,stale,12,0.916667,0,-0.916667,-1,-0.75,0.000977
+both,,auto,,,falseMem,12,0,0,0,0,0,1
+both,,auto,,,wrongChangesApplied,12,0,0,0,0,0,1
+both,,auto,,,promptsPer100Turns,12,0,0,0,0,0,1
+both,,auto,,,promptTokens,12,13231.333333,18090.083333,4858.75,4645.916667,5095,0.000488
+both,,gate,,,f1,12,0.844958,0.90149,0.056532,0.038063,0.072886,0.001953
+both,,gate,,,stale,12,1.083333,0,-1.083333,-1.416667,-0.75,0.001953
+both,,gate,,,falseMem,12,0,0,0,0,0,1
+both,,gate,,,wrongChangesApplied,12,0,0,0,0,0,1
+both,,gate,,,promptsPer100Turns,12,24.486731,25.984041,1.49731,-0.95213,3.612044,0.179688
+both,,gate,,,promptTokens,12,13347.166667,18394.5,5047.333333,4718.75,5396.916667,0.000488

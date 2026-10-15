@@ -13,5 +13,8 @@
   "extractor": "Gemini gemini-3.5-flash-lite",
   "e": null,
   "extractMinScore": "default (0.25)",
-  "startedAt": "2026-10-13T08:39:39.442Z"
+  "candidates": "adaptive",
+  "repropose": 2,
+  "restate": 1,
+  "startedAt": "2026-10-15T13:01:18.902Z"
 }

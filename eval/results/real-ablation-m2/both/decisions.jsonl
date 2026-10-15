@@ -1,0 +1,72 @@
+{"policy":"gate","seed":1,"persona":0,"session":3,"action":"update","current":"The user has a dog named Tiger.","content":"The user has a dog named Mithu.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":0,"session":3,"action":"update","current":"The user prefers their coffee black.","content":"The user prefers their coffee with extra sugar.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":0,"session":4,"action":"update","current":"The user goes to the gym at 6 am every day.","content":"The user goes to the gym at 7 am every day as of 2026-10-15.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":0,"session":4,"action":"forget","current":"The user's sister is named Priya.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":0,"session":5,"action":"retire","current":"The user's main hobby is chess.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":0,"session":5,"action":"retire","current":"The user goes to the gym at 7 am every day as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":1,"session":3,"action":"update","current":"The user goes to the gym at 7 am every day.","content":"The user goes to the gym at 6 pm every day.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":1,"session":3,"action":"retire","current":"The user is leading a project called Lotus at Swiggy.","content":null,"judgedCorrect":false,"accepted":false}
+{"policy":"gate","seed":1,"persona":1,"session":4,"action":"forget","current":"The user's birthday is on 21 September.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":1,"session":4,"action":"retire","current":"The user lives in Kolkata.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":1,"session":5,"action":"retire","current":"The user lives in Pune.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":1,"session":5,"action":"retire","current":"The user lives in Pune as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":1,"session":5,"action":"retire","current":"The user drives a Seltos.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":2,"session":3,"action":"retire","current":"The user prefers oat milk in their coffee.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":2,"session":3,"action":"forget","current":"The user lives in Bhubaneswar.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":2,"session":4,"action":"retire","current":"The user's main hobby is playing the guitar.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":2,"session":4,"action":"retire","current":"The user goes to the gym at 8 pm every day.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":2,"session":5,"action":"retire","current":"The user is learning Spanish.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":3,"session":3,"action":"forget","current":"The user's birthday is on December 8th.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":3,"session":4,"action":"retire","current":"The user is learning Korean.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":3,"session":5,"action":"retire","current":"The user is leading a project called Nimbus at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":3,"session":5,"action":"retire","current":"The user prefers their coffee as a cappuccino as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":3,"session":5,"action":"retire","current":"The user prefers extra sugar in their coffee as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":3,"session":5,"action":"retire","current":"The user prefers oat milk in their coffee.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":3,"action":"retire","current":"The user drives a Tata Nexon.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":3,"action":"retire","current":"The user's main hobby is cycling.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":4,"action":"forget","current":"The user's main hobby is painting as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":4,"action":"retire","current":"The user drives a Baleno as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":5,"action":"forget","current":"The user's birthday is on 21 September.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":5,"action":"retire","current":"The user works at Freshworks as of 2026-10-15.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":4,"session":5,"action":"retire","current":"The user is leading a project called Orion at work as of 2026-10-15.","content":null,"judgedCorrect":false,"accepted":false}
+{"policy":"gate","seed":1,"persona":5,"session":3,"action":"forget","current":"The user's sister is named Ritu.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":5,"session":3,"action":"retire","current":"The user is leading a project called Atlas at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":5,"session":4,"action":"retire","current":"The user works at Razorpay.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":5,"session":4,"action":"forget","current":"The user is vegetarian.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":5,"session":5,"action":"update","current":"The user prefers their coffee with extra sugar.","content":"The user prefers their coffee black.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":5,"session":5,"action":"retire","current":"The user is leading a project called Falcon at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":6,"session":3,"action":"forget","current":"The user works at Freshworks.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":6,"session":3,"action":"forget","current":"The user is leading a project called Falcon at work.","content":null,"judgedCorrect":false,"accepted":false}
+{"policy":"gate","seed":1,"persona":6,"session":3,"action":"update","current":"The user goes to the gym at 6 am every day.","content":"The user goes to the gym at 7 am every day.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":6,"session":4,"action":"update","current":"The user's dog is named Bruno.","content":"The user's dog is named Mithu.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":6,"session":4,"action":"update","current":"The user's main hobby is chess.","content":"The user's main hobby is badminton.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":6,"session":5,"action":"retire","current":"The user is learning Japanese.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":6,"session":5,"action":"retire","current":"The user is leading a project called Falcon at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":7,"session":3,"action":"forget","current":"The user's sister is named Ananya.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":7,"session":3,"action":"forget","current":"The user's main hobby is cycling.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":7,"session":4,"action":"retire","current":"The user goes to the gym at 7 am every day.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":7,"session":5,"action":"retire","current":"The user is leading a project called Nimbus at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":7,"session":5,"action":"retire","current":"The user works at Swiggy.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":8,"session":3,"action":"forget","current":"The user's birthday is on 21 September.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":8,"session":3,"action":"retire","current":"The user is leading a project called Atlas at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":8,"session":4,"action":"update","current":"The user lives in Jaipur.","content":"The user lives in Bhubaneswar.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":8,"session":5,"action":"retire","current":"The user has a dog named Coco.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":8,"session":5,"action":"retire","current":"The user lives in Bhubaneswar.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":9,"session":3,"action":"retire","current":"The user prefers to drink their coffee black.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":9,"session":3,"action":"retire","current":"The user's main hobby is cycling.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":9,"session":4,"action":"forget","current":"The user lives in Indore.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":9,"session":4,"action":"forget","current":"The user's main hobby is badminton.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":9,"session":5,"action":"retire","current":"The user is leading a project called Nimbus at work.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":9,"session":5,"action":"update","current":"The user goes to the gym at 8 pm every day.","content":"The user goes to the gym at 6 pm every day.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":10,"session":3,"action":"forget","current":"The user's main hobby is chess.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":10,"session":3,"action":"retire","current":"The user is eggetarian.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":10,"session":4,"action":"retire","current":"The user is pescatarian.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":10,"session":4,"action":"update","current":"The user goes to the gym at 6 pm every day.","content":"The user goes to the gym at 8 pm every day.","judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":10,"session":4,"action":"retire","current":"The user is vegan.","content":null,"judgedCorrect":false,"accepted":false}
+{"policy":"gate","seed":1,"persona":10,"session":5,"action":"forget","current":"The user's sister is named Ritu.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":11,"session":3,"action":"retire","current":"The user goes to the gym at 6 am every day.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":11,"session":3,"action":"retire","current":"The user drives a Creta.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":11,"session":4,"action":"retire","current":"The user lives in Hyderabad.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":11,"session":4,"action":"retire","current":"The user drives a Swift.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":11,"session":5,"action":"forget","current":"The user's sister is named Kavya.","content":null,"judgedCorrect":true,"accepted":true}
+{"policy":"gate","seed":1,"persona":11,"session":5,"action":"retire","current":"The user works at Infosys.","content":null,"judgedCorrect":true,"accepted":true}
