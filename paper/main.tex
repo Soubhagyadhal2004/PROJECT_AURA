@@ -243,12 +243,12 @@ Fig.~\ref{fig:policies} and Table~\ref{tab:policies} compare the four policies o
 \label{sec:retrieval}
 Candidate selection builds on memory search, so we first measured search alone. Each store holds one persona's current facts plus $N\in\{25,100,350\}$ unrelated facts; every stored fact is asked about with two natural questions (``Which company do I work for?''), \retrQueries\ queries in all over 20 personas and 3 seeds. A query is a hit when the right memory is among the top six results. We compare AURA's hybrid score with the 0.25 minimum, the same score without a minimum, embeddings only and keywords only (the fallback used when the embedding model is unavailable). A check that re-scoring reproduces AURA's real top-six lists succeeded for all queries (differences only from ties).
 
-\begin{table}[t]
+\begin{table*}[!t]
 \centering\small
 \caption{Retrieval: share of questions whose answer memory is in the top six.}
 \label{tab:retr}
 \adjustbox{max width=\linewidth}{\input{tables/retrieval.tex}}
-\end{table}
+\end{table*}
 
 Table~\ref{tab:retr} shows that AURA's search finds the right fact for only \retrAuraHit\ of the questions at $N=350$ and returns nothing at all for \retrAuraEmpty, while the same score without a minimum reaches \retrNominHit. The cause is visible in the scores: for \retrBelowMin\ of the questions the right fact scores below 0.25 on the hybrid score, because a natural question about a fact (``What do I do for fun?'') shares few words and only moderate embedding similarity with the stored sentence (``The user's main hobby is chess'').
 
@@ -261,12 +261,12 @@ Table~\ref{tab:retr} shows that AURA's search finds the right fact for only \ret
 
 The failure is concentrated in a few kinds of fact (Table~\ref{tab:retrslot}). Facts with a distinctive topic word (dog, sister, birthday, coffee, language) are found almost always; facts that people phrase in many ways or that name no topic word (city, employer, diet, car) are often not found with the 0.25 minimum, although the no-minimum search finds most of them.
 
-\begin{table}[t]
+\begin{table*}[!t]
 \centering\small
 \caption{Minimum score trade-off: found / noise for $N$ and minimum score. Found: share of stored-fact questions answered; noise: share of never-stated questions that still return memories.}
 \label{tab:thr}
 \adjustbox{max width=\linewidth}{\input{tables/threshold.tex}}
-\end{table}
+\end{table*}
 
 The minimum score is there for a reason. Table~\ref{tab:thr} and Fig.~\ref{fig:threshold} show the trade-off: lowering it raises the share of stored facts found but also the share of questions about things the user never said that still return memories (noise), up to 1.00 with no minimum. A single threshold therefore has to compromise between recall and silence, and at 0.25 AURA returns something for about half of the never-stated questions at $N=350$ while finding only 0.70 of the stored ones. For a conversational recall tool this may be tolerable; for the extractor, whose job is to see the memory it must change, it is a bottleneck.
 
@@ -388,12 +388,12 @@ Table~\ref{tab:real1} and Fig.~\ref{fig:real} give the same ablation with a real
 \subsection{Per-persona results}
 Table~\ref{tab:perpersona} lists every persona of the first model under the gate. With the baseline selection, \personasStaleBase\ of 12 personas ended with at least one stale fact and \personasMissBase\ had at least one change target missing from the prompt; with F1+F2 none did. Persona 9 has the same F1 under both settings. Persona 3 has a lower F1 under F1+F2 because the model stored one more hypothetical sentence (``would like to live in Goa someday''), which lowers precision; none of its updates is wrong, so this is not a regression in updating.
 
-\begin{table}[t]
+\begin{table*}[!t]
 \centering\footnotesize
 \caption{Per-persona results, first model, gate policy. Missed targets: change turns whose target memory was not in the prompt.}
 \label{tab:perpersona}
 \adjustbox{max width=\linewidth}{\input{tables/perpersona.tex}}
-\end{table}
+\end{table*}
 
 \subsection{A worked example}
 \label{sec:example}
@@ -432,12 +432,12 @@ The rejected proposal shows a limitation of our reviewer. The oracle judges prop
 \subsection{Cost in requests, tokens and time}
 Table~\ref{tab:cost} gives the cost per persona. The number of requests is the same (one extraction per user turn); prompt tokens grow by about \tokInc\% because more candidates are listed; output tokens are unchanged. Measured time per request is not a reliable cost measure here: it changed from \latBaseA\ s to \latBothA\ s with the first model but from \latBaseB\ s to \latBothB\ s with the second, which indicates that API load during the runs, not the prompt size, dominated.
 
-\begin{table}[t]
+\begin{table*}[!t]
 \centering\small
 \caption{Cost per persona (gate policy; means over 12 personas).}
 \label{tab:cost}
 \adjustbox{max width=\linewidth}{\input{tables/cost.tex}}
-\end{table}
+\end{table*}
 
 \subsection{Scorer validity}
 Table~\ref{tab:agree} shows the agreement of the automatic labels with the author's hand labels. Three of \agrBaseN\,+\,\agrBothN\ memories differ; in all three the automatic scorer labelled a correct statement of unemployment or finished project as ``ended'' or ``other'' while the annotator judged it true, so the automatic F1 is, if anything, slightly conservative on these three. These labels were kept as annotated. Since the scorer and the labels share one author and the same persona rules, the agreement shows consistency, not independence.
