@@ -17,7 +17,7 @@ const { values: a } = parseArgs({
     gate: { type: "string", default: R("gate-sim/v2-20261013") },
     "gate-fix": { type: "string", default: R("gate-sim/v2-20261013-extract-nomin") },
     retrieval: { type: "string", default: R("retrieval/v2-20261013") },
-    reach: { type: "string", default: R("reachability/v2-20261013") },
+    reach: { type: "string", default: R("reachability/v3-20261014") },
     "scorer-check": { type: "string", default: R("real-scorer-check/v2-20261013") },
     real: { type: "string", default: R("real-gemini/20261013-130739") },
     "real-fix": { type: "string" },
@@ -195,6 +195,24 @@ P(`- Consistency: personas average ${f(turns, 1)} user turns, 4 of them distract
   `equal e x ${f(Math.min(...perE), 1)}-${f(Math.max(...perE), 1)}, as expected (a wrong change is skipped when no true memory is shown). Every review card was correct at e = 0 (prompt precision ${f(err(G, "gate", 0).promptPrecision)}).`);
 P(`- Simulation runs use a simulated clock (1 ms per call), so they are exactly repeatable; a repeated slice of Experiment 1 matched the full run field by field.`);
 P(`- \`npm run test:server\` passes with the instrumentation and the option added.`, ``);
+
+// Candidate-selection modes (Experiment 3, v3 runs) and the paired ablation (eval/ABLATION.md, npm run eval:compare)
+{
+  const sm = fs.readFileSync(path.join(a.reach, "summary.md"), "utf8");
+  const i = sm.indexOf("## Candidate-selection modes");
+  if (i >= 0) P(sm.slice(i).trim().replace(/^## /, "## Experiment 3b: "), ``);
+  const ab = path.join(EVAL, "ABLATION.md");
+  if (fs.existsSync(ab)) {
+    const t = fs.readFileSync(ab, "utf8");
+    P(`## Experiment 5: ablation of the two switches (simulated, paired)`, ``,
+      `Baseline vs. +F1 (\`AURA_REPROPOSE=2\`), +F2 (\`AURA_CANDIDATES=adaptive\`) and both, with a restate turn after every update (${rel(path.join(EVAL, "results", "ablation"))}). Paired differences over the same persona and seed; the full tables are in \`ABLATION.md\`.`, ``);
+    for (const part of t.split(/^## /m).slice(1)) {
+      const head = part.split("\n")[0];
+      const body = part.split("<details>")[0].split("\n").slice(1).join("\n").trim();
+      P(`### ${head}`, ``, body, ``);
+    }
+  }
+}
 
 // Figures, claims, limitations
 P(`## Figures (\`results/figures/\`, PDF + PNG, \`python eval/make_figures.py\`)`, ``);

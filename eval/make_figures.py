@@ -21,7 +21,7 @@ RUNS = {
     "gate": os.path.join(RES, "gate-sim", "v2-20261013"),
     "gate_fix": os.path.join(RES, "gate-sim", "v2-20261013-extract-nomin"),
     "retrieval": os.path.join(RES, "retrieval", "v2-20261013"),
-    "reach": os.path.join(RES, "reachability", "v2-20261013"),
+    "reach": os.path.join(RES, "reachability", "v3-20261014"),
 }
 
 # reference categorical palette (validated: adjacent CVD dE >= 9.1, normal-vision >= 22.9 on #fcfcfb)
@@ -194,6 +194,34 @@ def fig_threshold(out):
     save(fig, out, "fig4_threshold_tradeoff")
 
 
+def fig_ablation(out):
+    """Gate policy, error sweep: stale facts and prompts per 100 turns for baseline, +F1, +F2, both (paired runs in results/ablation)."""
+    base = os.path.join(RES, "ablation")
+    names = [("baseline", "baseline"), ("f1", "+F1"), ("f2", "+F2"), ("both", "F1 + F2")]
+    if not all(os.path.exists(os.path.join(base, d, "summary.csv")) for d, _ in names):
+        return
+    data = {}
+    for d, _ in names:
+        for r in read(os.path.join(base, d, "summary.csv")):
+            if r["sweep"] == "error" and r["policy"] == "gate":
+                data[(d, float(r["e"]))] = r
+    es = sorted({e for (_, e) in data})
+    marks, styles = ["o", "s", "^", "D"], ["-", "--", "-.", ":"]
+    fig, axes = plt.subplots(1, 2, figsize=(6.6, 2.6))
+    for ax, key, lab in ((axes[0], "stale", "stale facts per persona"), (axes[1], "promptsPer100Turns", "review prompts per 100 turns")):
+        for i, (d, nm) in enumerate(names):
+            ys = [float(data[(d, e)][key + "_mean"]) for e in es]
+            cs = [float(data[(d, e)][key + "_ci95"]) for e in es]
+            ax.errorbar(es, ys, yerr=cs, color=C[i], marker=marks[i], linestyle=styles[i], linewidth=1.2, markersize=4, capsize=2, label=nm)
+        ax.set_xlabel("extractor error rate $e$")
+        ax.set_ylabel(lab)
+        ax.set_xticks(es)
+        style(ax)
+    axes[1].legend(frameon=False, loc="lower right", labelcolor=INK)
+    fig.tight_layout()
+    save(fig, out, "fig5_ablation")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(RES, "figures"))
@@ -203,3 +231,4 @@ if __name__ == "__main__":
     fig_fix(args.out)
     fig_reach(args.out)
     fig_threshold(args.out)
+    fig_ablation(args.out)

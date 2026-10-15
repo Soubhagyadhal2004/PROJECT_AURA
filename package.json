@@ -27,6 +27,7 @@
     "eval:lme": "node --no-warnings --import ./eval/lib/register.mjs eval/run-longmemeval.mjs",
     "eval:rescore": "node eval/rescore-real.mjs",
     "eval:results": "node eval/build-results.mjs",
+    "eval:compare": "node eval/compare-variants.mjs",
     "test:desktop": "node --test desktop/tests/server-process.test.cjs",
     "desktop": "npm run build && electron .",
     "desktop:start": "electron .",

@@ -20,6 +20,7 @@ npm run eval:all           # all of the above
 npm run eval:real          # Exp. 4  real Gemini extractor: shows the plan, sends nothing
 npm run eval:real -- --yes # ... and runs it (needs internet + GEMINI_API_KEY in .env; ~170 requests)
 npm run eval:rescore -- <real-gemini run folder>   # re-score with the current rules + annotation sheet
+npm run eval:compare       # paired comparison of baseline / +F1 / +F2 / both (writes ABLATION.md, ABLATION.csv)
 npm run eval:results       # writes RESULTS.md from the result folders (never edit its numbers by hand)
 python eval/make_figures.py # figures (PDF + PNG) from the result folders; needs matplotlib
 ```
@@ -141,3 +142,29 @@ eval/
 - `package.json`: the `eval:*` scripts.
 
 None of these change what the app does by default; `npm run test:server` passes (26/26).
+
+
+## Ablation of the two memory switches (journal paper, Direction 1)
+
+Switches (all default off, read from the environment on every call; see `server/memory.mjs`):
+
+- `AURA_CANDIDATES=default|nomin|sentence|adaptive`: which stored memories the extractor is shown.
+- `AURA_REPROPOSE=N`: a rejected change may come back at most N times, only after the user said something new.
+
+Every runner takes `--candidates`, `--repropose` (and the simulated and real runners also `--restate 1`, which adds a
+"Like I said, ..." turn after each update). Use one folder per variant:
+
+```
+# simulated (about 4 s per variant)
+for v in "baseline default 0" "f1 default 2" "f2 adaptive 0" "both adaptive 2"; do set -- $v
+  npm run eval:gate -- --errors 0,0.1,0.2 --policies auto,gate --restate 1 --candidates $2 --repropose $3 --out eval/results/ablation/$1
+done
+npm run eval:compare                      # paired differences, bootstrap intervals, sign tests
+
+# real Gemini: same four variants into eval/results/real-ablation/<name>, then
+npm run eval:compare -- --dir eval/results/real-ablation --out eval/ABLATION-REAL.md
+
+# LongMemEval: baseline vs. both
+npm run eval:lme -- --candidates default --repropose 0 --out eval/results/lme/baseline
+npm run eval:lme -- --candidates adaptive --repropose 2 --out eval/results/lme/both
+```
