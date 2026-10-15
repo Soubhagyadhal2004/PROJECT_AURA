@@ -214,6 +214,29 @@ P(`- \`npm run test:server\` passes with the instrumentation and the option adde
   }
 }
 
+// Real-Gemini ablation, second model, hand-label agreement and LongMemEval (embedded from the files the scripts wrote)
+{
+  const readIf = (p) => (fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null);
+  const sections = (t) => t.split(/^## /m).slice(1).map((part) => [part.split("\n")[0], part.split("<details>")[0].split("\n").slice(1).join("\n").trim()]);
+  for (const [file, title, folder] of [["ABLATION-REAL.md", "Experiment 6: ablation with the real Gemini extractor (paired)", "real-ablation"], ["ABLATION-REAL-M2.md", "Experiment 6b: the same comparison with a second model (baseline vs. F1 + F2)", "real-ablation-m2"]]) {
+    const t = readIf(path.join(EVAL, file));
+    if (!t) continue;
+    const cfgFile = path.join(EVAL, "results", folder, "baseline", "config.json");
+    const cfg = fs.existsSync(cfgFile) ? json(path.dirname(cfgFile), "config.json") : null;
+    P(`## ${title}`, ``, `\`results/${folder}/\`${cfg ? `: ${cfg.extractor}, ${cfg.personas} personas x ${cfg.seeds} seed(s) per policy, restate turns on, u = ${cfg.u}` : ""}. Full tables: \`${file}\`.`, ``);
+    for (const [head, body] of sections(t)) P(`### ${head}`, ``, body, ``);
+  }
+  for (const d of ["baseline", "both"]) {
+    const t = readIf(path.join(EVAL, "results", "real-ablation", d, "agreement.md"));
+    if (t) P(`## Hand labels vs. automatic labels (${d})`, ``, t.replace(/^# .*\n+/, "").trim(), ``);
+  }
+  const lb = readIf(path.join(EVAL, "results", "lme", "baseline", "summary.md")), lo = readIf(path.join(EVAL, "results", "lme", "both", "summary.md")), lc = readIf(path.join(EVAL, "ABLATION-LME.md"));
+  if (lb && lo) {
+    P(`## Experiment 7: LongMemEval knowledge-update questions`, ``, `Baseline (\`results/lme/baseline\`, default candidates, no re-propose):`, ``, lb.replace(/^# .*\n+/, "").trim(), ``, `With F1 + F2 (\`results/lme/both\`, adaptive candidates, re-propose 2):`, ``, lo.replace(/^# .*\n+/, "").trim(), ``);
+    if (lc) P(`### Paired comparison of the two runs`, ``, lc.replace(/^# .*\n+/, "").trim(), ``);
+  }
+}
+
 // Figures, claims, limitations
 P(`## Figures (\`results/figures/\`, PDF + PNG, \`python eval/make_figures.py\`)`, ``);
 P(`1. \`fig1_policies\`: F1, true facts destroyed and prompts vs. e for the four policies (Findings 1, 2).`,
@@ -226,6 +249,9 @@ P(`- Gating changes to existing memories prevents almost all destructive errors 
 P(`- F1 over the user's facts understates the harm of auto-applied wrong changes.`);
 P(`- Candidate selection limits what the extractor can change (${pct(Math.min(...missRange))}-${pct(Math.max(...missRange))} of change requests miss their target with 25-${big} other memories), and selecting the 12 best matches without a minimum fixes most of it.`);
 P(`- Not re-asking after a rejection makes the gate sensitive to user mistakes.`);
+P(``, `Supported by Experiments 5-6 (paired comparisons; see ABLATION.md, ABLATION-REAL.md, ABLATION-REAL-M2.md):`);
+P(`- Showing the extractor more candidates (F2) removes most stale facts: in simulation at every error rate, and with real Gemini on two models (12 personas each; paired, sign test). It costs about a third more prompt tokens and a few more review prompts.`);
+P(`- Hand labels agree with the automatic scoring rules (Cohen's kappa about 0.98 on the two main runs; three disagreements, all retirements written as current facts).`);
 if (real) {
   P(``, `Supported by Experiment 4 (small sample, real Gemini):`);
   P(`- The real extractor's errors are mostly stale facts (unreachable targets) and new facts that should not be stored (hypotheticals, misreadings); it made no destructive changes here.`);
@@ -233,7 +259,9 @@ if (real) {
 P(``, `Not supported yet:`);
 P(`- Rates for Gemini's errors with confidence intervals: needs more personas (Experiment 4 had ${real ? real.cfg.personas : 0} per policy).`);
 P(`- Anything about real users (burden as felt, trust, time per decision): needs a user study.`);
-P(`- Comparison with Mem0 / LongMemEval numbers: different data and tasks; run AURA on LongMemEval before putting numbers side by side.`);
+P(`- A comparison with Mem0 or other published LongMemEval numbers: AURA was run on 30 knowledge-update questions with one model (Experiment 7), a different protocol from published results; do not put the numbers side by side.`);
+P(`- Any effect of F1 (re-propose) with real Gemini: Experiment 6 shows none; its effect is small and situational even in simulation.`);
+P(`- Effects on LongMemEval: with F1 + F2 the gated system gains questions (see Experiment 7, paired test) but the difference is not significant at 30 questions, and every AURA variant stays below the full-context baseline.`);
 P(`- Novelty of the approval gate: the literature search so far was not exhaustive.`, ``);
 P(`## Limitations`, ``);
 P(`- Personas average ${f(turns, 1)} user turns over 5 sessions; long-term effects over months are extrapolated.`);

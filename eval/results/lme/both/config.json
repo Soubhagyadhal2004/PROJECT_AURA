@@ -1,0 +1,30 @@
+{
+  "experiment": "longmemeval",
+  "dataFile": "longmemeval_s_cleaned.json",
+  "questionTypes": [
+    "knowledge-update"
+  ],
+  "questions": 30,
+  "distractorSessions": 3,
+  "policies": [
+    "append",
+    "auto",
+    "gate"
+  ],
+  "baselines": [
+    "none",
+    "context"
+  ],
+  "reviewer": "evidence",
+  "k": 10,
+  "assistantChars": 1500,
+  "withDates": false,
+  "judge": true,
+  "seed": 1,
+  "rpm": 12,
+  "extractMinScore": "default (0.25)",
+  "candidates": "adaptive",
+  "repropose": 2,
+  "model": "Gemini gemini-3.1-flash-lite",
+  "startedAt": "2026-10-15T20:47:36.699Z"
+}

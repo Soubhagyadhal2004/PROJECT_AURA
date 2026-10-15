@@ -277,6 +277,154 @@ Baseline vs. +F1 (`AURA_REPROPOSE=2`), +F2 (`AURA_CANDIDATES=adaptive`) and both
 | user | gate | 0.1 | 0.3 | stale facts | 60 | 2.600 -> 1.567 | -1.033 [-1.317, -0.767] | <0.001 | better |
 | user | gate | 0.1 | 0.3 | prompts / 100 turns | 60 | 23.348 -> 31.013 | +7.665 [6.503, 8.903] | <0.001 |  |
 
+## Experiment 6: ablation with the real Gemini extractor (paired)
+
+`results/real-ablation/`: Gemini gemini-3.5-flash-lite, 12 personas x 1 seed(s) per policy, restate turns on, u = 0. Full tables: `ABLATION-REAL.md`.
+
+### +F1 (re-propose) vs. baseline
+
+| sweep | policy | e | u | metric | pairs | baseline -> variant | difference [95% CI] | p (sign) |  |
+|---|---|---|---|---|---|---|---|---|---|
+| - | auto | - | - | F1 | 12 | 0.908 -> 0.902 | -0.007 [-0.031, 0.013] | 1.000 | worse |
+| - | auto | - | - | stale facts | 12 | 1.000 -> 1.000 | +0.000 [-0.250, 0.250] | 1.000 | same |
+| - | auto | - | - | prompts / 100 turns | 12 | 0.000 -> 0.000 | +0.000 [0.000, 0.000] | 1.000 |  |
+| - | gate | - | - | F1 | 12 | 0.905 -> 0.897 | -0.008 [-0.026, 0.009] | 0.625 | worse |
+| - | gate | - | - | stale facts | 12 | 1.000 -> 1.083 | +0.083 [0.000, 0.250] | 1.000 | worse |
+| - | gate | - | - | prompts / 100 turns | 12 | 23.332 -> 21.898 | -1.434 [-3.231, 0.000] | 0.250 |  |
+
+### +F2 (adaptive candidates) vs. baseline
+
+| sweep | policy | e | u | metric | pairs | baseline -> variant | difference [95% CI] | p (sign) |  |
+|---|---|---|---|---|---|---|---|---|---|
+| - | auto | - | - | F1 | 12 | 0.908 -> 0.943 | +0.035 [0.003, 0.067] | 0.453 | better |
+| - | auto | - | - | stale facts | 12 | 1.000 -> 0.000 | -1.000 [-1.333, -0.667] | 0.002 | better |
+| - | auto | - | - | prompts / 100 turns | 12 | 0.000 -> 0.000 | +0.000 [0.000, 0.000] | 1.000 |  |
+| - | gate | - | - | F1 | 12 | 0.905 -> 0.953 | +0.048 [-0.015, 0.100] | 0.146 | better |
+| - | gate | - | - | stale facts | 12 | 1.000 -> 0.333 | -0.667 [-1.250, 0.167] | 0.021 | better |
+| - | gate | - | - | prompts / 100 turns | 12 | 23.332 -> 24.211 | +0.879 [-1.573, 3.042] | 0.508 |  |
+
+### F1 + F2 vs. baseline
+
+| sweep | policy | e | u | metric | pairs | baseline -> variant | difference [95% CI] | p (sign) |  |
+|---|---|---|---|---|---|---|---|---|---|
+| - | auto | - | - | F1 | 12 | 0.908 -> 0.956 | +0.048 [0.019, 0.076] | 0.109 | better |
+| - | auto | - | - | stale facts | 12 | 1.000 -> 0.000 | -1.000 [-1.333, -0.667] | 0.002 | better |
+| - | auto | - | - | prompts / 100 turns | 12 | 0.000 -> 0.000 | +0.000 [0.000, 0.000] | 1.000 |  |
+| - | gate | - | - | F1 | 12 | 0.905 -> 0.982 | +0.077 [0.037, 0.114] | 0.021 | better |
+| - | gate | - | - | stale facts | 12 | 1.000 -> 0.000 | -1.000 [-1.333, -0.667] | 0.002 | better |
+| - | gate | - | - | prompts / 100 turns | 12 | 23.332 -> 24.912 | +1.580 [-0.266, 3.382] | 0.289 |  |
+
+## Experiment 6b: the same comparison with a second model (baseline vs. F1 + F2)
+
+`results/real-ablation-m2/`: Gemini gemini-3.1-flash-lite, 12 personas x 1 seed(s) per policy, restate turns on, u = 0. Full tables: `ABLATION-REAL-M2.md`.
+
+### F1 + F2 vs. baseline
+
+| sweep | policy | e | u | metric | pairs | baseline -> variant | difference [95% CI] | p (sign) |  |
+|---|---|---|---|---|---|---|---|---|---|
+| - | auto | - | - | F1 | 12 | 0.840 -> 0.892 | +0.053 [0.031, 0.076] | 0.012 | better |
+| - | auto | - | - | stale facts | 12 | 0.917 -> 0.000 | -0.917 [-1.000, -0.750] | <0.001 | better |
+| - | auto | - | - | prompts / 100 turns | 12 | 0.000 -> 0.000 | +0.000 [0.000, 0.000] | 1.000 |  |
+| - | gate | - | - | F1 | 12 | 0.845 -> 0.901 | +0.057 [0.038, 0.073] | 0.002 | better |
+| - | gate | - | - | stale facts | 12 | 1.083 -> 0.000 | -1.083 [-1.417, -0.750] | 0.002 | better |
+| - | gate | - | - | prompts / 100 turns | 12 | 24.487 -> 25.984 | +1.497 [-0.952, 3.612] | 0.180 |  |
+
+## Hand labels vs. automatic labels (baseline)
+
+195 labelled rows; agreement 193 (0.990); Cohen's kappa 0.975.
+
+Disagreements:
+
+- gate-1-3 #1325: auto ended, human true | The user wrapped up project Nimbus and is currently between projects as of October 2026.
+- gate-1-4 #1409: auto other, human true | The user is currently unemployed as of October 2026.
+
+## Hand labels vs. automatic labels (both)
+
+175 labelled rows; agreement 174 (0.994); Cohen's kappa 0.981.
+
+Disagreements:
+
+- auto-1-4 #418: auto other, human true | The user is currently not working as of October 2026.
+
+## Experiment 7: LongMemEval knowledge-update questions
+
+Baseline (`results/lme/baseline`, default candidates, no re-propose):
+
+30 questions from longmemeval_s_cleaned.json; each played with its evidence sessions plus 3 distractor session(s) (seed 1); answers from the top 10 memories of AURA's search; candidate selection: default (0.25), mode `default`, re-proposal limit 0; gate reviewer: evidence. Accuracy = Gemini judge (knowledge-update rule), with 95% Wilson interval. "Answer in memory" = a normalised active memory contains the reference answer string (a heuristic, only meaningful for short answers).
+
+| system | n | accuracy [95% CI] | strict match | answer in active memory | answer in top-k | prompts / question | active memories | superseded or outdated | requests |
+|---|---|---|---|---|---|---|---|---|---|
+| none | 30 | 0.000 [-0.000, 0.114] | 0.000 | n/a | n/a | n/a | n/a | n/a | 60 |
+| context | 30 | 0.767 [0.591, 0.882] | 0.600 | n/a | n/a | n/a | n/a | n/a | 60 |
+| append | 30 | 0.400 [0.246, 0.577] | 0.333 | 0.467 | 0.433 | 0.00 | 11.37 | 0.00 | 210 |
+| auto | 30 | 0.467 [0.302, 0.639] | 0.333 | 0.400 | 0.400 | 0.00 | 10.47 | 0.73 | 210 |
+| gate | 30 | 0.267 [0.142, 0.444] | 0.200 | 0.400 | 0.367 | 0.83 | 10.47 | 0.60 | 210 |
+
+Paired comparisons (same questions; b = only the first system is right, c = only the second; exact two-sided sign test):
+
+| first | second | b | c | p |
+|---|---|---|---|---|
+| none | context | 0 | 23 | 0.000 |
+| none | append | 0 | 12 | 0.000 |
+| none | auto | 0 | 14 | 0.000 |
+| none | gate | 0 | 8 | 0.008 |
+| context | append | 12 | 1 | 0.003 |
+| context | auto | 9 | 0 | 0.004 |
+| context | gate | 15 | 0 | 0.000 |
+| append | auto | 3 | 5 | 0.727 |
+| append | gate | 7 | 3 | 0.344 |
+| auto | gate | 6 | 0 | 0.031 |
+
+Every row: runs.csv. Every final memory store: memories.jsonl. The model's answers are in the `response` column.
+
+With F1 + F2 (`results/lme/both`, adaptive candidates, re-propose 2):
+
+30 questions from longmemeval_s_cleaned.json; each played with its evidence sessions plus 3 distractor session(s) (seed 1); answers from the top 10 memories of AURA's search; candidate selection: default (0.25), mode `adaptive`, re-proposal limit 2; gate reviewer: evidence. Accuracy = Gemini judge (knowledge-update rule), with 95% Wilson interval. "Answer in memory" = a normalised active memory contains the reference answer string (a heuristic, only meaningful for short answers).
+
+| system | n | accuracy [95% CI] | strict match | answer in active memory | answer in top-k | prompts / question | active memories | superseded or outdated | requests |
+|---|---|---|---|---|---|---|---|---|---|
+| none | 30 | 0.000 [-0.000, 0.114] | 0.000 | n/a | n/a | n/a | n/a | n/a | 60 |
+| context | 30 | 0.733 [0.556, 0.858] | 0.567 | n/a | n/a | n/a | n/a | n/a | 60 |
+| append | 30 | 0.333 [0.192, 0.512] | 0.300 | 0.433 | 0.433 | 0.00 | 11.27 | 0.00 | 210 |
+| auto | 30 | 0.500 [0.332, 0.668] | 0.400 | 0.500 | 0.500 | 0.00 | 10.73 | 0.67 | 210 |
+| gate | 30 | 0.433 [0.274, 0.608] | 0.367 | 0.467 | 0.433 | 0.87 | 10.80 | 0.63 | 210 |
+
+Paired comparisons (same questions; b = only the first system is right, c = only the second; exact two-sided sign test):
+
+| first | second | b | c | p |
+|---|---|---|---|---|
+| none | context | 0 | 22 | 0.000 |
+| none | append | 0 | 10 | 0.002 |
+| none | auto | 0 | 15 | 0.000 |
+| none | gate | 0 | 13 | 0.000 |
+| context | append | 12 | 0 | 0.000 |
+| context | auto | 8 | 1 | 0.039 |
+| context | gate | 9 | 0 | 0.004 |
+| append | auto | 0 | 5 | 0.063 |
+| append | gate | 1 | 4 | 0.375 |
+| auto | gate | 3 | 1 | 0.625 |
+
+Every row: runs.csv. Every final memory store: memories.jsonl. The model's answers are in the `response` column.
+
+### Paired comparison of the two runs
+
+Baseline: `results/lme/baseline` (candidates default, no re-propose). Other: `results/lme/both`. Same 30 questions, same model; "judged" = the judge model's verdict, "strict" = strict string match. b = right only in the baseline run, c = right only in the other run; exact two-sided sign test on the discordant pairs.
+
+| system | measure | questions | baseline run | other run | difference | b | c | p (sign) |
+|---|---|---|---|---|---|---|---|---|
+| none | judged | 30 | 0.000 | 0.000 | +0.000 | 0 | 0 | 1.000 |
+| none | strict | 30 | 0.000 | 0.000 | +0.000 | 0 | 0 | 1.000 |
+| context | judged | 30 | 0.767 | 0.733 | -0.033 | 1 | 0 | 1.000 |
+| context | strict | 30 | 0.600 | 0.567 | -0.033 | 1 | 0 | 1.000 |
+| append | judged | 30 | 0.400 | 0.333 | -0.067 | 3 | 1 | 0.625 |
+| append | strict | 30 | 0.333 | 0.300 | -0.033 | 2 | 1 | 1.000 |
+| auto | judged | 30 | 0.467 | 0.500 | +0.033 | 1 | 2 | 1.000 |
+| auto | strict | 30 | 0.333 | 0.400 | +0.067 | 1 | 3 | 0.625 |
+| gate | judged | 30 | 0.267 | 0.433 | +0.167 | 0 | 5 | 0.063 |
+| gate | strict | 30 | 0.200 | 0.367 | +0.167 | 0 | 5 | 0.063 |
+
+The rows for `none` and `context` use no memory: any difference there is noise between runs (sampling of the answering and judging model). Differences of the memory systems (append, auto, gate) of that size should not be read as an effect.
+
 ## Figures (`results/figures/`, PDF + PNG, `python eval/make_figures.py`)
 
 1. `fig1_policies`: F1, true facts destroyed and prompts vs. e for the four policies (Findings 1, 2).
@@ -292,13 +440,19 @@ Supported (Experiments 1-3, simulation with AURA's real code):
 - Candidate selection limits what the extractor can change (25%-31% of change requests miss their target with 25-350 other memories), and selecting the 12 best matches without a minimum fixes most of it.
 - Not re-asking after a rejection makes the gate sensitive to user mistakes.
 
+Supported by Experiments 5-6 (paired comparisons; see ABLATION.md, ABLATION-REAL.md, ABLATION-REAL-M2.md):
+- Showing the extractor more candidates (F2) removes most stale facts: in simulation at every error rate, and with real Gemini on two models (12 personas each; paired, sign test). It costs about a third more prompt tokens and a few more review prompts.
+- Hand labels agree with the automatic scoring rules (Cohen's kappa about 0.98 on the two main runs; three disagreements, all retirements written as current facts).
+
 Supported by Experiment 4 (small sample, real Gemini):
 - The real extractor's errors are mostly stale facts (unreachable targets) and new facts that should not be stored (hypotheticals, misreadings); it made no destructive changes here.
 
 Not supported yet:
 - Rates for Gemini's errors with confidence intervals: needs more personas (Experiment 4 had 4 per policy).
 - Anything about real users (burden as felt, trust, time per decision): needs a user study.
-- Comparison with Mem0 / LongMemEval numbers: different data and tasks; run AURA on LongMemEval before putting numbers side by side.
+- A comparison with Mem0 or other published LongMemEval numbers: AURA was run on 30 knowledge-update questions with one model (Experiment 7), a different protocol from published results; do not put the numbers side by side.
+- Any effect of F1 (re-propose) with real Gemini: Experiment 6 shows none; its effect is small and situational even in simulation.
+- Effects on LongMemEval: with F1 + F2 the gated system gains questions (see Experiment 7, paired test) but the difference is not significant at 30 questions, and every AURA variant stays below the full-context baseline.
 - Novelty of the approval gate: the literature search so far was not exhaustive.
 
 ## Limitations

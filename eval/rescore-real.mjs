@@ -124,7 +124,8 @@ if (!fs.existsSync(sheet)) {
 }
 
 // ---- agreement, once labels are filled in ----
-const labelled = parseCSV(fs.readFileSync(sheet, "utf8")).filter((r) => r.human_label.trim());
+// Excel turns the word "true" into TRUE when a CSV is saved, so both columns are compared in lower case
+const labelled = parseCSV(fs.readFileSync(sheet, "utf8")).map((r) => ({ ...r, auto_label: String(r.auto_label ?? "").trim().toLowerCase() })).filter((r) => r.human_label.trim());
 if (labelled.length) {
   const norm = (s) => s.trim().toLowerCase();
   const agree = labelled.filter((r) => norm(r.human_label) === r.auto_label).length;
