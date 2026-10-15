@@ -1,0 +1,20 @@
+\begin{tabular}{llccccc}
+\toprule
+$e$ & policy & F1 & stale & false & destroyed & prompts/100 \\
+\midrule
+0 & append-only & 0.597 $\pm$ 0.025 & 5.00 & 0.00 & 0.00 & 0.0 \\
+ & auto-apply & 0.881 $\pm$ 0.018 & 1.57 & 0.00 & 0.00 & 0.0 \\
+ & gate changes & 0.854 $\pm$ 0.022 & 1.80 & 0.00 & 0.00 & 19.5 \\
+ & gate all & 0.861 $\pm$ 0.023 & 1.62 & 0.00 & 0.00 & 65.8 \\
+\addlinespace[2pt]
+0.1 & append-only & 0.581 $\pm$ 0.023 & 4.58 & 0.33 & 0.00 & 0.0 \\
+ & auto-apply & 0.798 $\pm$ 0.026 & 1.68 & 0.43 & 1.60 & 0.0 \\
+ & gate changes & 0.797 $\pm$ 0.026 & 1.85 & 0.33 & 0.03 & 24.4 \\
+ & gate all & 0.795 $\pm$ 0.029 & 1.83 & 0.02 & 0.05 & 69.0 \\
+\addlinespace[2pt]
+0.3 & append-only & 0.523 $\pm$ 0.034 & 3.87 & 1.20 & 0.00 & 0.0 \\
+ & auto-apply & 0.650 $\pm$ 0.032 & 1.92 & 1.33 & 4.60 & 0.0 \\
+ & gate changes & 0.653 $\pm$ 0.033 & 2.18 & 1.22 & 0.25 & 33.4 \\
+ & gate all & 0.707 $\pm$ 0.030 & 1.98 & 0.07 & 0.40 & 77.6 \\
+\bottomrule
+\end{tabular}

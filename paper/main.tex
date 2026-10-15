@@ -1,0 +1,292 @@
+% IEEE journal-style manuscript. Compiles with IEEEtran (Overleaf, TeX Live full); without IEEEtran.cls a plain
+% two-column fallback is used so the numbers and figures can still be checked.
+\IfFileExists{IEEEtran.cls}{\documentclass[journal]{IEEEtran}\def\HAVEIEEE{1}}{\documentclass[10pt,twocolumn]{article}\usepackage[margin=0.7in,columnsep=0.25in]{geometry}}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[export]{adjustbox}
+\usepackage[table]{xcolor}
+\usepackage{microtype}
+\usepackage[hyphens]{url}
+\usepackage{cite}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+\makeatletter
+\@ifundefined{IEEEkeywords}{\newenvironment{IEEEkeywords}{\par\small\textbf{Index Terms---}}{\par}}{}
+\@ifundefined{IEEEauthorblockN}{\newcommand{\IEEEauthorblockN}[1]{#1\\}\newcommand{\IEEEauthorblockA}[1]{#1}}{}
+\makeatother
+\input{numbers.tex}
+
+\newcommand{\aura}{AURA}
+\graphicspath{{figures/}}
+
+\begin{document}
+
+\title{A Review Gate Stops Wrong Memory Writes but Not Missed Updates: Candidate Selection in User-Controlled Long-Term Memory for LLM Assistants}
+
+\author{\IEEEauthorblockN{[Author name]}
+\IEEEauthorblockA{Affiliation and e-mail to be added}}
+
+\maketitle
+
+\begin{abstract}
+Assistants that keep long-term memory about their user increasingly ask for approval before they change what they believe. We ask what such an approval gate does, and does not, protect. We study a local assistant (\aura) in which a language model proposes add, update, retire and forget operations, changes to existing memories wait for the user, and old values are kept as history. In simulation (\simN\ persona runs per cell) the gate removes \destroyRedMin--\destroyRedMax\% of the true facts that automatic application destroys when the extractor errs, at \gatePromptsMin--\gatePromptsMax\ review prompts per 100 turns. It does not reduce stale facts: the extractor can only change memories that are shown in its prompt, and with default candidate selection the memory to be changed is shown for only \reachLast\ of change requests when 350 unrelated memories are stored, and for \mixedDefault\ when the change shares a message with other sentences. A candidate selection that searches sentence by sentence without a minimum score raises the latter to \mixedAdaptive. On two real Gemini models (12 personas each) the change target was missing from the prompt in \candMissABase\ and \candMissBBase\ of 136 change turns; with the new selection it was never missing, stale facts per persona fell from about 1 to 0 under the gate (sign test $p=\realAgatestaleP$ and $\realBgatestaleP$), and F1 rose by \realAgatefOneDiff\ and \realBgatefOneDiff, at about \tokInc\% more prompt tokens and no significant increase in review prompts. A rule that lets a rejected change return after the user says something new gave no measurable benefit with real models. On 30 LongMemEval knowledge-update questions the gain with the gate (\lmegateDiff) is not significant ($p=\lmegateP$), and the memory system stays below full-context answering. The evaluation harness and all result files are provided.
+\end{abstract}
+
+\begin{IEEEkeywords}
+long-term memory, conversational assistants, large language models, human-in-the-loop, memory update, evaluation.
+\end{IEEEkeywords}
+
+\section{Introduction}
+Large language model (LLM) assistants that remember facts about their user across conversations must decide, after every message, whether to add a fact, change one they already hold, or drop one. Mistakes are costly in two different ways. A \emph{wrong write} replaces or removes something that was true (``moved to Pune'' overwrites the true employer), and a \emph{missed update} leaves an outdated value active after the user has said that it changed. A growing line of work treats wrong writes as a governance problem and proposes checks before a memory is stored \cite{lam2026ssgm}. A direct form of such a check is to ask the user: changes to existing memories become proposals that the user accepts or rejects, and old values are kept as history.
+
+This paper starts from a simple observation about where such a gate sits. It acts on the operations that the extractor model \emph{returns}. An update that the extractor never produces cannot be proposed, and therefore cannot be approved. In a retrieval-based design the extractor can change only the memories that are placed in its prompt, so the choice of these candidates bounds how many updates are possible at all. We therefore ask three questions about a user-controlled memory: (Q1) How much of the damage of extractor errors does the gate remove, and at what cost in user prompts? (Q2) How often is the memory that a change refers to visible to the extractor, and how does this depend on the size of the store and on how the candidates are chosen? (Q3) Does a better candidate selection translate into fewer stale facts with real models, and what does it cost?
+
+We study these questions in \aura, a local assistant with a SQLite memory store, local sentence embeddings and a Gemini extractor, using the assistant's real server code throughout. Our contributions are:
+\begin{enumerate}
+\item We separate wrong writes from missed updates and measure both under a controlled error model. The gate cuts destroyed true facts by \destroyRedMin--\destroyRedMax\% but leaves stale facts essentially unchanged (Sec.~\ref{sec:policies}).
+\item We measure \emph{reachability}, the share of change requests whose target memory is in the extractor's prompt, over store sizes from 0 to 350 and for single-sentence and mixed messages, and show that the default selection becomes the bottleneck (Sec.~\ref{sec:reach}).
+\item We describe two small switches, a candidate selection that searches per sentence without a minimum score (F2) and a bounded re-proposal rule (F1), and evaluate them in an ablation in simulation and with two real Gemini models, including their cost. F2 carries the effect; F1 does not show a measurable benefit with real models (Sec.~\ref{sec:ablation}--\ref{sec:real}).
+\item We report an external check on LongMemEval knowledge-update questions and state clearly what it does and does not show (Sec.~\ref{sec:lme}), and we provide the harness, the personas generator and all raw results.
+\end{enumerate}
+We deliberately keep claims narrow. The personas are synthetic and English, the real-model samples are small, the user is simulated, and no user study was run (Sec.~\ref{sec:threats}).
+
+\section{Related Work}
+\label{sec:related}
+\textbf{Memory for conversational agents and its benchmarks.} Mem0 describes an architecture that extracts, consolidates and retrieves salient facts from conversations and evaluates it on LoCoMo \cite{chhikara2025mem0}, a benchmark of very long agent--agent conversations with question answering, summarisation and multimodal tasks \cite{maharana2024locomo}. LongMemEval benchmarks chat assistants on five long-term memory abilities, among them reasoning about updated facts, and splits memory design into indexing, retrieval and reading \cite{wu2024longmemeval}. Our work uses LongMemEval's knowledge-update questions as an external check; the benchmark does not label which proposed memory changes are right, which is why our gate there uses an oracle approximation (Sec.~\ref{sec:lme}).
+
+\textbf{Updating and governing memory.} Lam et al.\ propose a governance framework (SSGM) that separates memory updates from task execution and applies consistency checks and permission controls before anything is stored \cite{lam2026ssgm}. Patel studies the \emph{memory-update gap}, the loss of accuracy on questions about facts that changed, and addresses it by reinforcement-learning fine-tuning of a small model \cite{patel2026supersede}. Xiong et al.\ show that adding and deleting stored experiences changes agent behaviour and that errors can compound through retrieval \cite{xiong2025memory}, and Xiao et al.\ find that errors entering through memory updates persist longer than errors entering through user questions \cite{xiao2026errors}. Zhang et al.\ place a learned gate between memory store and model that decides which \emph{retrieved} memories are admitted \cite{zhang2026memgate}. Our setting differs in three ways: the gate here is a user decision on \emph{writes}, the problem we isolate is upstream of the gate (what the extractor can see), and the remedy is inference-time candidate selection rather than training. Chu surveys security threats to agents across layers and notes that current benchmarks rarely test failures that span sessions \cite{chu2026survey}.
+
+\textbf{Scope.} The works above were read at the level of their arXiv abstract pages for this paper, not in full; their detailed claims should be checked before they are relied upon. We make no claim about priority over any of them.
+
+\section{System: User-Controlled Memory in \aura}
+\label{sec:system}
+\subsection{Memory store and operations}
+\aura\ keeps memories in SQLite. A memory has text, a category (preference, personal, people, work, plan, other), a status (\texttt{active}, \texttt{superseded} or \texttt{outdated}), a pointer to the memory that replaced it, a source and its conversation, and timestamps. After each user message a Gemini model (default \texttt{gemini-3.5-flash-lite}) receives the message and a list of candidate memories and returns operations: \emph{add}, \emph{update} (replace a value), \emph{retire} (the fact no longer holds), or \emph{forget}. An update keeps the old row as \texttt{superseded} with a link to its successor; retire marks the old row \texttt{outdated}. The extractor can refer only to memory identifiers that appear in its prompt.
+
+\subsection{The review gate}
+When ``ask before changing memories'' is on (the default), \emph{add} operations are applied directly and every operation that touches an existing memory becomes a stored \emph{proposal} (action, target memory, proposed text, conversation). The user accepts or rejects it; nothing changes until then. We call this policy \textbf{gate}. The comparison policies are \textbf{append} (only additions; a changed fact is stored as a second fact), \textbf{auto} (all operations applied at once), and \textbf{gate\,all} (also new facts wait for approval; emulated in the harness, not an \aura\ setting).
+
+\subsection{Candidate selection}
+\label{sec:candidates}
+The prompt contains candidate memories chosen from the store. By default these are the 12 best search matches for the user's message plus the 8 most recently created memories. Search combines the cosine similarity of MiniLM sentence embeddings \cite{wang2020minilm} (\texttt{all-MiniLM-L6-v2}, run locally) and a lexical overlap score, $0.85\cdot\cos + 0.15\cdot\mathrm{lex}$, and drops matches below a minimum score of 0.25. We evaluate four modes, selected by an environment variable:
+\begin{itemize}
+\item \textbf{default}: as above;
+\item \textbf{no minimum}: the same, without the 0.25 cut-off;
+\item \textbf{sentence}: the message is split into sentences and each is searched on its own, so that an unrelated sentence does not dilute the query;
+\item \textbf{adaptive} (F2): sentence search without minimum score, and a larger number of matches (up to 24) when the message contains a change cue (words such as ``moved'', ``stopped'', ``no longer'', ``forget'').
+\end{itemize}
+Using F2 enlarges the prompt (Sec.~\ref{sec:cost}); the minimum score exists to keep unrelated memories out (Fig.~\ref{fig:threshold}).
+
+\subsection{Re-proposal (F1)}
+A rejected proposal normally ends the matter. With F1 a rejected change may be proposed again, at most $N$ times, but only after the user has said something new about it (we use $N=2$). The aim is to recover from a rejection that was a slip without nagging the user.
+
+\section{Evaluation Method}
+\label{sec:method}
+All experiments run \aura's real server code, real SQLite schema and real local embedding model on a throw-away database. What is real and what is simulated is listed in Table~\ref{tab:real-sim}.
+
+\begin{table}[t]
+\centering\small
+\caption{What is real and what is simulated.}
+\label{tab:real-sim}
+\adjustbox{max width=\linewidth}{\begin{tabular}{lcc}
+\toprule
+Part & Sim.\ runs & Real runs \\
+\midrule
+Store, operations, proposals, search & \aura\ code & \aura\ code \\
+Sentence embeddings & MiniLM & MiniLM \\
+Extractor & simulated, rate $e$ & Gemini \\
+Reviewing user & simulated, slip $u$ & simulated, $u=0$ \\
+Conversations & scripted personas & same personas \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Personas and ground truth}
+A persona has 8 of 12 fact types (city, employer, dog, sister, diet, gym time, language, car, project, coffee, hobby, birthday) and five sessions of about \userTurnsPersona\ user turns. Facts are stated, later updated (``I've just moved to Hyderabad''), retired (``I stopped going to the gym''), forgotten on request, repeated, and mixed with distractors that must not become memories (hypotheticals, questions, assistant suggestions, facts about friends). A store starts with 30 unrelated true background facts and gains 10 between sessions, imitating earlier use. The true state is known after every turn. In the ablation runs a restating turn (``Like I said, \ldots'') follows each update, which is what F1 needs to act on.
+
+\subsection{Simulated extractor and user}
+The simulated extractor returns what a correct model would return for the turn, using only the memories shown in the prompt; a change whose target is not shown becomes an add, as a real model would do. Errors are injected at rate $e$: a correct operation is dropped, a distractor becomes a false memory, or a true memory shown to the model is retired or overwritten with a false value. All policies face the same random draws. The simulated user reviews proposals at the end of a session, accepts correct ones and rejects wrong ones, and errs with probability $u$ (default 0.05).
+
+\subsection{Metrics}
+\textbf{F1} compares the persona's active memories with the true facts. \textbf{Stale} counts active memories holding a value the user gave earlier that is no longer true. \textbf{False} counts active memories the user never stated about themselves. \textbf{Destroyed} counts true memories, persona and background, that ended up superseded, outdated or deleted by a wrong change; F1 does not see the background memories, so this is the safety metric. \textbf{Prompts/100} is the number of review cards per 100 user turns. \textbf{Reachability} is the share of change requests whose target memory is among the extractor's candidates. \textbf{Prompt tokens} are summed over a persona run.
+
+\subsection{Real-model runs and scoring}
+Real runs use Gemini as the extractor for 12 personas, one seed, with the simulated user as an oracle ($u=0$), for the policies auto and gate and four variants (baseline, F1, F2, F1+F2). They were repeated for baseline and F1+F2 with a second model (\texttt{gemini-3.1-flash-lite}). Because models word memories freely, a memory is scored by value: the automatic scorer maps each active memory to a persona fact and a label (true, stale, ended, hypothetical, third party, other). The author hand-labelled every memory of the baseline and F1+F2 runs (\agrBaseN\ and \agrBothN\ memories). There were \realExtractions\ extraction calls and \realExtractionErrors\ failed.
+
+\subsection{Statistics}
+Differences between variants are paired by persona and seed. We report the mean difference with a 95\% bootstrap interval (4000 resamples, fixed seed) and an exact two-sided sign test on the non-tied pairs. No correction for multiple tests is applied; the tests run are \simTests\ (simulated ablation) and \realTests\ (real runs), so isolated $p$-values near 0.03 should not be read as findings. Reachability is reported with Wilson intervals \cite{wilson1927}, and agreement between hand and automatic labels with Cohen's $\kappa$ \cite{cohen1960}; since there is a single annotator this measures the scorer against the annotator, not human--human agreement.
+
+\section{Results: What the Gate Protects}
+\label{sec:policies}
+Fig.~\ref{fig:policies} and Table~\ref{tab:policies} compare the four policies over extractor error rates $e$ (\simN\ persona runs per cell: 20 personas, 3 seeds).
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig1_policies.pdf}
+\caption{Policies under extractor errors (simulated, shaded: 95\% CI). (a) F1. (b) True facts destroyed by wrong changes. (c) Review prompts per 100 turns.}
+\label{fig:policies}
+\end{figure*}
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Review policies versus extractor error rate $e$ (simulated, user slip $u=0.05$, mean per persona).}
+\label{tab:policies}
+\adjustbox{max width=\linewidth}{\input{tables/policies.tex}}
+\end{table*}
+
+\textbf{Wrong writes.} Under auto-apply the extractor's errors destroy true facts: \autoDestroyedEZeroZeroFive, \autoDestroyedEZeroOne, \autoDestroyedEZeroTwo\ and \autoDestroyedEZeroThree\ per persona at $e=0.05,0.1,0.2,0.3$. The gate reduces this to \gateDestroyedEZeroZeroFive, \gateDestroyedEZeroOne, \gateDestroyedEZeroTwo\ and \gateDestroyedEZeroThree, i.e.\ by \destroyRedMin--\destroyRedMax\%. The remainder comes from the simulated user's slips. The price is \gatePromptsMin--\gatePromptsMax\ review prompts per 100 turns; requiring approval for new facts as well removes false new facts but needs about \gateAllRatio\ times as many prompts as the gate.
+
+\textbf{Missed updates.} The gate does not help here. At $e=0$ the append-only policy leaves \appendStaleEZero\ stale facts per persona by construction, and the gate still leaves 1.80, slightly more than auto-apply (1.57); across the error sweep the gate leaves between 1.8 and 2.2 stale facts, auto-apply between 1.6 and 1.9. F1 of the gate is below auto-apply at $e=0$ (0.854 vs.\ 0.881) and about equal at higher $e$. The gate thus buys safety at a small cost in F1, and does nothing for stale facts.
+
+\textbf{User slips.} Table~\ref{tab:slip} varies the simulated user's slip rate at $e=0.1$. F1 falls from \slipFZero\ to \slipFThree\ and stale facts rise from \slipStaleZero\ to \slipStaleThree\ as $u$ goes from 0 to 0.3: a gate is only as good as the review.
+
+\begin{table}[t]
+\centering\small
+\caption{Gate under user slips (simulated, $e=0.1$).}
+\label{tab:slip}
+\adjustbox{max width=\linewidth}{\input{tables/slip.tex}}
+\end{table}
+
+\section{Results: What the Extractor Can See}
+\label{sec:reach}
+For each of \reachStores\ stores per size we generated update, retire and forget requests (\reachChanges\ in all) and checked whether the memory the request refers to is among the extractor's candidates. The store holds $N$ unrelated memories besides the ones the persona has stated.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig3_reachability.pdf}
+\caption{Share of change requests whose target memory is shown to the extractor, versus store size $N$ (shaded: Wilson 95\% CI).}
+\label{fig:reach}
+\end{figure}
+
+\begin{table}[t]
+\centering\small
+\caption{Reachability for single-sentence changes (95\% Wilson interval).}
+\label{tab:reach}
+\adjustbox{max width=\linewidth}{\input{tables/reach.tex}}
+\end{table}
+
+Reachability falls from \reachZero\ with an empty store to \reachLast\ at $N=350$ (Fig.~\ref{fig:reach}, Table~\ref{tab:reach}). Even with an empty store about one change in ten is out of reach because the 0.25 minimum drops weak matches. Without the minimum the figure is \reachLastNoMin\ at $N=350$. The recent-memory slots help only at small $N$.
+
+Table~\ref{tab:modes} compares the modes, with the mean number of candidates in parentheses. When the change shares the message with two unrelated sentences, which is common in natural conversation, default selection reaches only \mixedDefault\ of changes at $N=350$, because the embedding of the whole message is dominated by the unrelated content. Removing the minimum score gives \mixedNomin; per-sentence search alone \mixedSentence; and the adaptive mode \mixedAdaptive, at \candAdaptive\ candidates on average instead of \candDefault. Per-sentence search makes a mixed message behave like a single sentence. The minimum score is not free to remove, because it also suppresses unrelated matches (Fig.~\ref{fig:threshold}), and a larger prompt costs tokens.
+
+\begin{table}[t]
+\centering\small
+\caption{Reachability by selection mode (mean number of candidates in parentheses).}
+\label{tab:modes}
+\adjustbox{max width=\linewidth}{\input{tables/modes.tex}}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig4_threshold_tradeoff.pdf}
+\caption{Retrieval trade-off of the minimum score: share of stored facts found in the top six versus share of never-stated questions that still return memories. Circled: \aura's 0.25.}
+\label{fig:threshold}
+\end{figure}
+
+\section{Results: Ablation of the Two Switches}
+\label{sec:ablation}
+\subsection{Simulated}
+Table~\ref{tab:simabl} and Fig.~\ref{fig:abl} give the paired ablation under the gate (error sweep, $u=0.05$, restating turns on). F2 reduces stale facts per persona at $e=0.1$ from \simAblStalefOneOneBase\ to \simAblStalefTwoOne\ and F1+F2 to \simAblStalebothOne; the F2 effects are significant ($p<0.001$) in every cell shown. F1 alone moves F1 by \simAblFfOneZero\ at $e=0$ ($p=\simFOneZeroP$), and is not significant at $e=0.1$ and $0.2$. With 210 tests that single $p$-value would not survive a correction. F2 raises the review load by about 5 prompts per 100 turns at $e=0.1$ because more changes are discovered and proposed.
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Ablation under the gate (simulated). In parentheses: difference to the baseline and sign-test $p$ (60 pairs).}
+\label{tab:simabl}
+\adjustbox{max width=\linewidth}{\input{tables/sim_ablation.tex}}
+\end{table*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig5_ablation.pdf}
+\caption{Gate policy, error sweep: stale facts and review prompts for baseline, F1, F2, F1+F2 (simulated).}
+\label{fig:abl}
+\end{figure*}
+
+\section{Results: Real Gemini Extractors}
+\label{sec:real}
+Table~\ref{tab:real1} and Fig.~\ref{fig:real} give the same ablation with a real extractor (12 personas, one seed, oracle user). Table~\ref{tab:real2} repeats baseline and F1+F2 with a second model.
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Real extractor \texttt{gemini-3.5-flash-lite}: 12 paired personas per cell. In parentheses: difference to the baseline and exact sign-test $p$.}
+\label{tab:real1}
+\adjustbox{max width=\linewidth}{\input{tables/real1.tex}}
+\end{table*}
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{Second extractor \texttt{gemini-3.1-flash-lite}: baseline versus F1+F2, 12 paired personas.}
+\label{tab:real2}
+\adjustbox{max width=\linewidth}{\input{tables/real2.tex}}
+\end{table*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig6_real.pdf}
+\caption{Gate policy with real Gemini extractors: (a) F1, (b) stale facts per persona; mean and 95\% bootstrap interval over 12 personas.}
+\label{fig:real}
+\end{figure*}
+
+\textbf{Reachability on real conversations.} With the baseline selection, the target memory was missing from the prompt on \candMissABase\ of \changeTurnsA\ change turns (first model; both policies together) and \candMissBBase\ of \changeTurnsB\ (second model). With F1+F2 it was missing on \candMissABoth\ and \candMissBBoth. This is the mechanism of Sec.~\ref{sec:reach} observed with real conversations.
+
+\textbf{Stale facts and F1.} Under the gate, stale facts per persona fell from \realAgatestaleBase\ to \realAgatestaleBoth\ (first model; $p=\realAgatestaleP$) and from \realBgatestaleBase\ to \realBgatestaleBoth\ (second; $p=\realBgatestaleP$), and F1 rose from \realAgatefOneBase\ to \realAgatefOneBoth\ (\realAgatefOneDiff, $p=\realAgatefOneP$) and from \realBgatefOneBase\ to \realBgatefOneBoth\ (\realBgatefOneDiff, $p=\realBgatefOneP$). F2 alone reached \realAgatestalefTwoVal\ stale facts ($p=\realAgatestalefTwoP$) and F1 of \realAgatefOnefTwoVal\ ($p=\realAgatefOnefTwoP$, not significant); the benefit of adding F1 to F2 was not tested separately and is within what 12 personas can resolve. F1 alone changed nothing measurable (stale \realAgatestalefOneVal, $p=\realAgatestalefOneP$): on real models F1 is not supported. Under auto-apply the picture is the same (stale \realAautostaleBase\ to \realAautostaleBoth, $p=\realAautostaleP$).
+
+\textbf{Safety on real models.} No injected errors exist in real runs, so we count what the models did. Across all auto-apply persona runs (\realAutoRuns), \realAutoLostAll\ true background facts were destroyed by the model's own operations (\realAutoLostBase\ of them in the two baseline runs); across the \realGateRuns\ gate runs the count was \realGateLostAll. With the oracle user, no correct change was rejected, no wrong change was accepted and \realWrongApplied\ wrong changes were applied. Because the user is perfect and the counts are small, this is a consistency check on the simulation, not a measurement of real users.
+
+\textbf{Cost.} Prompt tokens per persona rose from about 13.4k to 18.1k (+\tokInc\%, $p<0.001$), and the number of prompts per 100 turns from \realAgatepromptsPerOneZeroZeroTurnsBase\ to \realAgatepromptsPerOneZeroZeroTurnsBoth\ (first model, $p=\realAgatepromptsPerOneZeroZeroTurnsP$) and from \realBgatepromptsPerOneZeroZeroTurnsBase\ to \realBgatepromptsPerOneZeroZeroTurnsBoth\ (second, $p=\realBgatepromptsPerOneZeroZeroTurnsP$), not significant. Of the change prompts, \gateAcceptedABoth\ of \gatePromptsABoth\ (first model) and \gateAcceptedBBoth\ of \gatePromptsBBoth\ (second) in the F1+F2 runs were correct changes that the user accepted, against \gateAcceptedABase\ of \gatePromptsABase\ and \gateAcceptedBBase\ of \gatePromptsBBase\ for the baselines; this is consistent with the added prompts being updates that the baseline missed.\label{sec:cost}
+
+\textbf{Other effects.} Under auto-apply the F2-only variant stored \falseAutoTwoA\ false facts across 12 personas where the baseline stored none, and F1+F2 stored none again; with these counts we cannot say whether this is an effect of F2 or noise.
+
+\subsection{Scorer validity}
+Table~\ref{tab:agree} shows the agreement of the automatic labels with the author's hand labels. Three of \agrBaseN\,+\,\agrBothN\ memories differ; in all three the automatic scorer labelled a correct statement of unemployment or finished project as ``ended'' or ``other'' while the annotator judged it true, so the automatic F1 is, if anything, slightly conservative on these three. These labels were kept as annotated. Since the scorer and the labels share one author and the same persona rules, the agreement shows consistency, not independence.
+
+\begin{table}[t]
+\centering\small
+\caption{Agreement between automatic and hand labels (single annotator).}
+\label{tab:agree}
+\adjustbox{max width=\linewidth}{\input{tables/agreement.tex}}
+\end{table}
+
+\section{External Check: LongMemEval}
+\label{sec:lme}
+LongMemEval's knowledge-update questions ask for the latest value of a fact that changed during the history \cite{wu2024longmemeval}. We took \lmeQ\ such questions of the ``S'' setting and played each with all evidence sessions plus three random distractor sessions (the same for every system) through \aura's extractor, store and search; answers come from the ten memories that \aura's search returns, and are graded by a Gemini judge written after the benchmark's rule (the official prompt is not reproduced) and by string match. All runs use \texttt{gemini-3.1-flash-lite}. There is no label for which memory changes are right, so the gate's reviewer is an oracle approximation: it accepts proposals made while reading an evidence session and rejects the rest. This gate figure is therefore an upper-bracket, not a measurement of real users. Baselines are answering with no memory and with the raw sessions as context.
+
+\begin{table}[t]
+\centering\small
+\caption{LongMemEval knowledge-update questions (judge-graded accuracy, $n=\lmeQ$). $b/c$: questions correct only in the baseline / only in the F1+F2 run.}
+\label{tab:lme}
+\adjustbox{max width=\linewidth}{\input{tables/lme.tex}}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig7_lme.pdf}
+\caption{LongMemEval accuracy by system for baseline and F1+F2 selection (95\% normal-approximation bars).}
+\label{fig:lme}
+\end{figure}
+
+Table~\ref{tab:lme} and Fig.~\ref{fig:lme} show that the gate system improves from \lmegateBase\ to \lmegateBoth\ (\lmeGateB\ questions worse, \lmeGateC\ better, $p=\lmegateP$), which is in the expected direction but not significant at this sample size; the systems without memory or with full context, which cannot be affected, differ by \lmecontextDiff\ between the two runs, which indicates run-to-run noise of that size. Auto-apply and append are not distinguishable between the runs. Full-context answering (\lmecontextBoth\ in the second run) remains clearly above the gate system (\lmegateBoth; \lmeCtxGateB\ vs.\ \lmeCtxGateC\ discordant questions, $p=\lmeCtxGateP$): a memory system trades accuracy for the properties it provides, such as small prompts, forgetting and user control. A run on all 78 knowledge-update questions would be needed for a firm statement.
+
+\section{Discussion}
+\label{sec:discussion}
+\textbf{Where the guarantee ends.} The gate provides a guarantee about what is \emph{written}: nothing changes without approval. It provides none about what is \emph{proposed}. In our experiments the second quantity depends on a component that looks like plumbing, the choice of candidate memories, and with default settings it is the main reason that stale facts remain. Evaluating a user-controlled memory by its write accuracy or by the number of approvals alone would miss this.
+
+\textbf{Design implications.} (i) Report reachability alongside accuracy for any extractor-based memory. (ii) Search per sentence rather than per message when messages are mixed. (iii) Treat the minimum score as a trade-off: the unfiltered selection raises reachability (\reachLastNoMin\ at $N=350$) but admits unrelated memories, so the price of F2 is a larger prompt. (iv) Budget for more prompt tokens (about \tokInc\%) and slightly more review cards.
+
+\textbf{On F1.} Letting a rejected change return only after new user input is cheap and conceptually neat, but we found no benefit with real models (the oracle user rejected no correct change in these runs), and only small, uncorrected-significance effects in simulation. Its value would have to be shown with real users who slip.
+
+\section{Threats to Validity}
+\label{sec:threats}
+\textbf{Synthetic and English personas.} Personas, distractors and the wording of changes were written by the system's author. The change cues of F2 were designed after the reachability failures were seen on the same generator, so F2 may be tuned to it; the LongMemEval check is the only independent text and is small. \textbf{Small real samples.} 12 personas, one seed per cell and two models of the same family; exact sign tests with 12 pairs cannot resolve small effects, and several F1 results are inconclusive rather than null. \textbf{Simulated user.} The real runs use a perfect reviewer, the simulations a random slip. Real users may ignore, batch or rubber-stamp prompts; whether additional prompts are tolerated is open. No user study was done. \textbf{Single annotator and scorer.} Labels come from the author. \textbf{One embedding model.} Reachability depends on MiniLM and the 0.25 threshold. \textbf{LongMemEval.} Thirty questions, a judge that is not the official prompt, an oracle reviewer, and a single seed. \textbf{Multiple tests.} Reported as counts; only the large effects are robust to correction. \textbf{Related work.} Sources were read at abstract level.
+
+\section{Conclusion}
+A review gate on memory changes is effective against the errors it can see: in our experiments it removes almost all of the true facts that automatic application destroys. It does not address updates the extractor never proposes, and in a retrieval-based design these are governed by which memories the extractor is shown. Showing candidates by sentence, without a minimum score and with a larger set on a change cue, removed all observed misses for two real Gemini models and removed the stale facts, at roughly a third more prompt tokens and no significant increase in review prompts, while an external check on LongMemEval pointed in the same direction without reaching significance. The practical lesson for user-controlled memories is to measure and report what the extractor can reach. Evaluating with real users, in other languages and with larger real samples is the necessary next step; the evaluation code and every raw result file are provided so that others can repeat and extend it.
+
+\section*{Data and Code Availability}
+The evaluation harness (\texttt{eval/}), the persona generator, all raw per-run files and the scripts that produce every table and figure of this paper (\texttt{eval/make\_paper\_assets.py}) are in the \aura\ project repository. Numbers in the text are generated from the result folders.
+
+\ifdefined\HAVEIEEE\bibliographystyle{IEEEtran}\else\bibliographystyle{unsrt}\fi
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,11 @@
+\begin{tabular}{lccccc}
+\toprule
+system & baseline & F1+F2 & difference & $b/c$ & $p$ \\
+\midrule
+no memory & 0.000 & 0.000 & +0.000 & 0/0 & 1.000 \\
+full context & 0.767 & 0.733 & $-$0.033 & 1/0 & 1.000 \\
+append-only & 0.400 & 0.333 & $-$0.067 & 3/1 & 0.625 \\
+auto-apply & 0.467 & 0.500 & +0.033 & 1/2 & 1.000 \\
+gate (oracle reviewer) & 0.267 & 0.433 & +0.167 & 0/5 & 0.063 \\
+\bottomrule
+\end{tabular}
