@@ -1,0 +1,49 @@
+started 16-10-2026 22:20:20.61 
+p01|default|gate|N100 done (198 s, 18 model calls, 11147 prompt tokens)
+p01|adaptive|gate|N100 done (388 s, 36 model calls, 26754 prompt tokens)
+p01|nomin_k24|gate|N100 done (531 s, 54 model calls, 45060 prompt tokens)
+p01|oracle_target|gate|N100 done (997 s, 72 model calls, 56353 prompt tokens)
+p02|default|gate|N100 done (1292 s, 90 model calls, 67753 prompt tokens)
+p02|adaptive|gate|N100 done (1438 s, 108 model calls, 83471 prompt tokens)
+p02|nomin_k24|gate|N100 done (1596 s, 126 model calls, 101709 prompt tokens)
+p02|oracle_target|gate|N100 done (1752 s, 144 model calls, 113140 prompt tokens)
+p03|default|gate|N100 done (1933 s, 162 model calls, 125141 prompt tokens)
+p03|adaptive|gate|N100 done (2083 s, 180 model calls, 141118 prompt tokens)
+p03|nomin_k24|gate|N100 done (2238 s, 198 model calls, 159778 prompt tokens)
+p03|oracle_target|gate|N100 done (2370 s, 216 model calls, 171859 prompt tokens)
+p04|default|gate|N100 done (2485 s, 234 model calls, 183930 prompt tokens)
+p04|adaptive|gate|N100 done (2654 s, 252 model calls, 199891 prompt tokens)
+p04|nomin_k24|gate|N100 done (2811 s, 270 model calls, 218955 prompt tokens)
+p04|oracle_target|gate|N100 done (3013 s, 288 model calls, 231046 prompt tokens)
+p05|default|gate|N100 done (3247 s, 306 model calls, 242499 prompt tokens)
+p05|adaptive|gate|N100 done (3497 s, 324 model calls, 258970 prompt tokens)
+p05|nomin_k24|gate|N100 done (3701 s, 342 model calls, 277298 prompt tokens)
+p05|oracle_target|gate|N100 done (3943 s, 360 model calls, 288771 prompt tokens)
+p06|default|gate|N100 done (4220 s, 378 model calls, 300378 prompt tokens)
+p06|adaptive|gate|N100 done (4374 s, 396 model calls, 316768 prompt tokens)
+p06|nomin_k24|gate|N100 done (4592 s, 414 model calls, 335719 prompt tokens)
+p06|oracle_target|gate|N100 done (4747 s, 432 model calls, 347495 prompt tokens)
+p07|default|gate|N100 done (4930 s, 450 model calls, 359076 prompt tokens)
+p07|adaptive|gate|N100 done (5249 s, 450 model calls, 359076 prompt tokens)
+p07|nomin_k24|gate|N100 done (5570 s, 450 model calls, 359076 prompt tokens)
+p07|oracle_target|gate|N100 done (5881 s, 450 model calls, 359076 prompt tokens)
+p08|default|gate|N100 done (6196 s, 450 model calls, 359076 prompt tokens)
+p08|adaptive|gate|N100 done (6511 s, 450 model calls, 359076 prompt tokens)
+p08|nomin_k24|gate|N100 done (6825 s, 450 model calls, 359076 prompt tokens)
+p08|oracle_target|gate|N100 done (7148 s, 450 model calls, 359076 prompt tokens)
+node:fs:1222
+  return binding.rmSync(getValidatedPath(path), opts.maxRetries, opts.recursive, opts.retryDelay);
+                 ^
+
+Error: EPERM, Permission denied: \\?\C:\Users\soubh\AppData\Local\Temp\aura-e2e-HDnTbJ '\\?\C:\Users\soubh\AppData\Local\Temp\aura-e2e-HDnTbJ'
+    at Object.rmSync (node:fs:1222:18)
+    at file:///C:/Users/soubh/Documents/Projects/Aura%20v3/eval/selection/e2e/run-e2e.mjs:264:4
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  errno: 1,
+  code: 'EPERM',
+  path: '\\\\?\\C:\\Users\\soubh\\AppData\\Local\\Temp\\aura-e2e-HDnTbJ',
+  syscall: 'rm'
+}
+
+Node.js v24.18.0
+exit 1 finished 17-10-2026  0:19:29.83 
