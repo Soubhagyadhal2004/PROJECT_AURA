@@ -1,24 +1,132 @@
 {
   "personas": 40,
   "personaSeedStart": 1,
-  "storeSizes": [0, 25, 50, 100, 200, 350],
+  "storeSizes": [
+    0,
+    25,
+    50,
+    100,
+    200,
+    350
+  ],
   "similarDistractorShare": 0.3,
   "recent": 8,
   "conditions": {
-    "default":        {"sentences": false, "floor": 0.25, "k": 12, "kCue": 12},
-    "nomin":          {"sentences": false, "floor": 0,    "k": 12, "kCue": 12},
-    "sentence":       {"sentences": true,  "floor": 0.25, "k": 12, "kCue": 12},
-    "adaptive":       {"sentences": true,  "floor": 0,    "k": 12, "kCue": 24},
-    "sent_nomin":     {"sentences": true,  "floor": 0,    "k": 12, "kCue": 12},
-    "cue_k":          {"sentences": false, "floor": 0.25, "k": 12, "kCue": 24},
-    "nomin_cue_k":    {"sentences": false, "floor": 0,    "k": 12, "kCue": 24},
-    "sent_cue_k":     {"sentences": true,  "floor": 0.25, "k": 12, "kCue": 24},
-    "default_k24":    {"sentences": false, "floor": 0.25, "k": 24, "kCue": 24},
-    "nomin_k24":      {"sentences": false, "floor": 0,    "k": 24, "kCue": 24},
-    "sent_nomin_k24": {"sentences": true,  "floor": 0,    "k": 24, "kCue": 24}
+    "default": {
+      "sentences": false,
+      "floor": 0.25,
+      "k": 12,
+      "kCue": 12
+    },
+    "nomin": {
+      "sentences": false,
+      "floor": 0,
+      "k": 12,
+      "kCue": 12
+    },
+    "sentence": {
+      "sentences": true,
+      "floor": 0.25,
+      "k": 12,
+      "kCue": 12
+    },
+    "adaptive": {
+      "sentences": true,
+      "floor": 0,
+      "k": 12,
+      "kCue": 24
+    },
+    "sent_nomin": {
+      "sentences": true,
+      "floor": 0,
+      "k": 12,
+      "kCue": 12
+    },
+    "cue_k": {
+      "sentences": false,
+      "floor": 0.25,
+      "k": 12,
+      "kCue": 24
+    },
+    "nomin_cue_k": {
+      "sentences": false,
+      "floor": 0,
+      "k": 12,
+      "kCue": 24
+    },
+    "sent_cue_k": {
+      "sentences": true,
+      "floor": 0.25,
+      "k": 12,
+      "kCue": 24
+    },
+    "default_k24": {
+      "sentences": false,
+      "floor": 0.25,
+      "k": 24,
+      "kCue": 24
+    },
+    "nomin_k24": {
+      "sentences": false,
+      "floor": 0,
+      "k": 24,
+      "kCue": 24
+    },
+    "sent_nomin_k24": {
+      "sentences": true,
+      "floor": 0,
+      "k": 24,
+      "kCue": 24
+    },
+    "bm25_k12": {
+      "rank": "bm25",
+      "sentences": false,
+      "floor": null,
+      "k": 12,
+      "kCue": 12
+    },
+    "bm25_k24": {
+      "rank": "bm25",
+      "sentences": false,
+      "floor": null,
+      "k": 24,
+      "kCue": 24
+    },
+    "rrf_k24": {
+      "rank": "rrf",
+      "sentences": false,
+      "floor": null,
+      "k": 24,
+      "kCue": 24
+    },
+    "sent_rrf_k24": {
+      "rank": "rrf",
+      "sentences": true,
+      "floor": null,
+      "k": 24,
+      "kCue": 24
+    }
   },
-  "serverModes": ["default", "nomin", "sentence", "adaptive"],
-  "bootstrap": {"resamples": 10000, "seed": 12345},
+  "serverModes": [
+    "default",
+    "nomin",
+    "sentence",
+    "adaptive"
+  ],
+  "bootstrap": {
+    "resamples": 10000,
+    "seed": 12345
+  },
   "alpha": 0.05,
-  "mainStoreSize": 350
+  "mainStoreSize": 350,
+  "addedConditions": {
+    "conditions": [
+      "bm25_k12",
+      "bm25_k24",
+      "rrf_k24",
+      "sent_rrf_k24"
+    ],
+    "addedAt": "2026-10-16",
+    "note": "Added after the pre-registered study, as baselines a reviewer would ask for; analysed as a separate, Holm-corrected family."
+  }
 }

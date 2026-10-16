@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
@@ -15,8 +15,8 @@ process.env.AURA_DATA_DIR = scratch;
 delete process.env.AURA_CANDIDATES;
 delete process.env.AURA_EXTRACT_MIN_SCORE;
 
-const mem = await import(path.join(ROOT, "server", "memory.mjs"));
-const { db } = await import(path.join(ROOT, "server", "db.mjs"));
+const mem = await import(pathToFileURL(path.join(ROOT, "server", "memory.mjs")).href);
+const { db } = await import(pathToFileURL(path.join(ROOT, "server", "db.mjs")).href);
 const { buildPersona } = await import("../testset.mjs");
 const { selectFromRankings, splitSentences } = await import("../select.mjs");
 const cfg = JSON.parse(fs.readFileSync(path.join(HERE, "..", "config.json"), "utf8"));

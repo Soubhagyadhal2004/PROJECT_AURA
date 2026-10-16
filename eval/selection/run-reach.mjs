@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -29,10 +29,10 @@ process.env.AURA_DATA_DIR = scratch;
 delete process.env.AURA_CANDIDATES;
 delete process.env.AURA_EXTRACT_MIN_SCORE;
 
-const mem = await import(path.join(ROOT, "server", "memory.mjs"));
-const { db } = await import(path.join(ROOT, "server", "db.mjs"));
+const mem = await import(pathToFileURL(path.join(ROOT, "server", "memory.mjs")).href);
+const { db } = await import(pathToFileURL(path.join(ROOT, "server", "db.mjs")).href);
 const { buildPersona } = await import("./testset.mjs");
-const { selectFromRankings, splitSentences } = await import("./select.mjs");
+const { selectFromRankings, splitSentences, bm25Index, rrf } = await import("./select.mjs");
 
 const sha = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
 const manPath = path.join(outDir, "manifest.json");
@@ -90,18 +90,26 @@ for (let p = start; p < Math.min(nPersonas, start + count); p++) {
     const recent = mem.coreMemories(cfg.recent);
     const recentIds = new Set(recent.map((m) => m.id));
     const cache = new Map();
-    const rankFor = (q) => cache.get(q);
+    const activeRows = db.prepare("SELECT * FROM memories WHERE status = 'active'").all().map((r) => ({ id: r.id, content: r.content, category: r.category }));
+    const bm25 = bm25Index(activeRows);
+    const lexCache = new Map();
+    const rankFor = (q, kind = "aura") => {
+      if (kind === "aura") return cache.get(q);
+      const key = kind + "|" + q;
+      if (!lexCache.has(key)) lexCache.set(key, kind === "bm25" ? bm25(q) : rrf(cache.get(q), bm25(q)));
+      return lexCache.get(key);
+    };
     for (const ev of persona.events) {
       for (const q of new Set([ev.text, ...splitSentences(ev.text)])) {
         if (!cache.has(q)) cache.set(q, await mem.searchMemories(q, 1e9, { minScore: -Infinity }));
       }
       const tid = target[ev.slot];
-      const whole = rankFor(ev.text);
+      const whole = cache.get(ev.text);
       const wRank = whole.findIndex((m) => m.id === tid) + 1;
       let sRank = Infinity;
       let sScore = -Infinity;
       for (const q of splitSentences(ev.text)) {
-        const rk = rankFor(q);
+        const rk = cache.get(q);
         const i = rk.findIndex((m) => m.id === tid);
         if (i + 1 < sRank) sRank = i + 1;
         if (rk[i].score > sScore) sScore = rk[i].score;

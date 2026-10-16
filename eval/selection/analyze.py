@@ -172,13 +172,29 @@ def main():
         d = paired(a, b)
         d["comparison"] = name
         extra.append(d)
+    # added baselines (BM25, rank fusion): a separate family, Holm-corrected within itself
+    fam = []
+    if "bm25_k24" in pp:
+        for name, a, b in [
+            ("bm25_k12 vs default", pp["bm25_k12"], pp["default"]),
+            ("bm25_k24 vs nomin_k24", pp["bm25_k24"], pp["nomin_k24"]),
+            ("rrf_k24 vs nomin_k24", pp["rrf_k24"], pp["nomin_k24"]),
+            ("sent_rrf_k24 vs sent_nomin_k24", pp["sent_rrf_k24"], pp["sent_nomin_k24"]),
+        ]:
+            d = paired(a, b)
+            d["comparison"] = name
+            fam.append(d)
+        for d, p in zip(fam, holm([d["p"] for d in fam])):
+            d["p_holm"] = p
+        write_csv(f"reach_baselines_N{MAIN_N}.csv", [{k: d[k] for k in ["comparison", "n", "diff", "lo", "hi", "pos", "neg", "ties", "p", "p_holm"]} for d in fam])
+    summary["baselines"] = fam
     write_csv(f"reach_comparisons_N{MAIN_N}.csv", [{k: d[k] for k in ["comparison", "n", "diff", "lo", "hi", "pos", "neg", "ties", "p", "p_holm"]} for d in res])
     write_csv(f"reach_exploratory_N{MAIN_N}.csv", [{k: d[k] for k in ["comparison", "n", "diff", "lo", "hi", "pos", "neg", "ties", "p"]} for d in extra])
     summary["comparisons"] = res
     summary["exploratory"] = extra
     json.dump(summary, open(os.path.join(OUT, "processed", "summary.json"), "w"), indent=1)
     print(json.dumps(summary["checks"]))
-    for d in res + extra:
+    for d in res + extra + fam:
         print(f"{d['comparison']:34s} {d['diff']:+.3f} [{d['lo']:+.3f},{d['hi']:+.3f}] {d['pos']}/{d['neg']}/{d['ties']} p={d['p']:.2g} holm={d.get('p_holm', float('nan')):.2g}")
 
 

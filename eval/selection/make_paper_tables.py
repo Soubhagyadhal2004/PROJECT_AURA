@@ -21,6 +21,8 @@ LABEL = {
     "sent_nomin": "per sentence + no min.", "cue_k": "$k{=}24$ on cue", "nomin_cue_k": "no min. + $k{=}24$ on cue",
     "sent_cue_k": "per sentence + $k{=}24$ on cue", "default_k24": "default, $k{=}24$", "nomin_k24": "no min., $k{=}24$",
     "sent_nomin_k24": "per sentence + no min., $k{=}24$",
+    "bm25_k12": "BM25, $k{=}12$", "bm25_k24": "BM25, $k{=}24$", "rrf_k24": "fusion (RRF), $k{=}24$",
+    "sent_rrf_k24": "per sentence + fusion, $k{=}24$",
 }
 DESC = {  # sentences, floor, k
     c: ("yes" if v["sentences"] else "no", "0.25" if v["floor"] else "--", f"{v['k']}" if v["k"] == v["kCue"] else f"{v['k']}/{v['kCue']}")
@@ -28,7 +30,8 @@ DESC = {  # sentences, floor, k
 }
 ROLE = {"default": "in AURA", "nomin": "in AURA", "sentence": "in AURA", "adaptive": "in AURA",
         "sent_nomin": "ablation", "cue_k": "ablation", "nomin_cue_k": "ablation", "sent_cue_k": "ablation",
-        "default_k24": "budget", "nomin_k24": "budget", "sent_nomin_k24": "budget"}
+        "default_k24": "budget", "nomin_k24": "budget", "sent_nomin_k24": "budget",
+        "bm25_k12": "lexical", "bm25_k24": "lexical", "rrf_k24": "fused", "sent_rrf_k24": "fused"}
 
 
 def byn(N, c):
@@ -107,6 +110,16 @@ for name, key in [("sent_nomin_k24 vs nomin_k24", "SnkVsNk"), ("adaptive vs sent
                   ("cue-free: adaptive vs nomin_k24", "FreeAdaVsNk"), ("nomin_k24 vs nomin", "NkVsNomin")]:
     d = ex[name]
     m += mac(f"selE{key}", f"{d['diff']:+.3f}") + mac(f"selE{key}Lo", f"{d['lo']:+.3f}") + mac(f"selE{key}Hi", f"{d['hi']:+.3f}") + mac(f"selE{key}P", pf(d["p"]))
+for c, key in [("bm25_k12", "BmTwelve"), ("bm25_k24", "BmTwentyfour"), ("rrf_k24", "Rrf"), ("sent_rrf_k24", "SentRrf")]:
+    if c in CFG["conditions"]:
+        d = byn(MAIN, c)
+        m += mac(f"sel{key}", f3(d["cr"])) + mac(f"sel{key}Lo", f3(d["lo"])) + mac(f"sel{key}Hi", f3(d["hi"])) + mac(f"sel{key}Cand", f"{d['ncand']:.1f}")
+        for g, gk in [("single", "Single"), ("mixed", "Mixed"), ("cue-free", "Free")]:
+            m += mac(f"sel{key}{gk}", f3(brk(g, c)["cr"]))
+for d, key in zip(S.get("baselines", []), ["BmVsDef", "BmVsNk", "RrfVsNk", "SentRrfVsSnk"]):
+    m += mac(f"selB{key}", f"{d['diff']:+.3f}") + mac(f"selB{key}Lo", f"{d['lo']:+.3f}") + mac(f"selB{key}Hi", f"{d['hi']:+.3f}") + mac(f"selB{key}P", pf(d["p_holm"]))
+    m += mac(f"selB{key}Pos", d["pos"]) + mac(f"selB{key}Neg", d["neg"])
+m += mac("selNConditions", len(CFG["conditions"]))
 m += mac("selCandSaving", f"{100 * (1 - byn(MAIN, 'adaptive')['ncand'] / byn(MAIN, 'nomin_k24')['ncand']):.0f}")
 m += mac("selMissedAll", f3(diag[MAIN]["missed_by_all"])) + mac("selMissedAllPct", f"{100 * diag[MAIN]['missed_by_all']:.1f}")
 m += mac("selLostFloor", f3(diag[MAIN]["lost_to_floor"])) + mac("selRtwelve", f3(diag[MAIN]["R12_whole_nofloor"])) + mac("selRtwentyfour", f3(diag[MAIN]["R24_whole_nofloor"]))
@@ -142,13 +155,22 @@ ax[0].legend(frameon=False, fontsize=6.5, loc="lower right", ncol=2)
 for c in CFG["conditions"]:
     d = byn(MAIN, c)
     color = COL.get(c, "#8a8a8a")
-    ax[1].errorbar(d["ncand"], d["cr"], yerr=[[d["cr"] - d["lo"]], [d["hi"] - d["cr"]]], fmt=MK.get(c, "o"), color=color, ms=5 if c in COL else 4, capsize=0, lw=1)
+    mk = MK.get(c, "x" if ROLE.get(c) in ("lexical", "fused") else "o")
+    ax[1].errorbar(d["ncand"], d["cr"], yerr=[[d["cr"] - d["lo"]], [d["hi"] - d["cr"]]], fmt=mk, color=color, ms=5 if c in COL else 4, capsize=0, lw=1)
     off = {"default": (4, -10), "default_k24": (4, 2), "cue_k": (4, -9), "nomin": (6, -3), "sentence": (-14, -13), "sent_cue_k": (-30, 7),
-           "sent_nomin": (-6, 6), "adaptive": (-30, 7), "nomin_cue_k": (4, -10), "nomin_k24": (-22, -12), "sent_nomin_k24": (-48, 5)}.get(c, (4, 2))
-    ax[1].annotate(LABEL[c].replace("$k{=}24$", "k=24").replace("$", ""), (d["ncand"], d["cr"]), textcoords="offset points", xytext=off, fontsize=5.6, color="#333333")
+           "sent_nomin": (-6, 6), "adaptive": (-34, 6), "nomin_cue_k": (4, -10), "nomin_k24": (-62, -1), "sent_nomin_k24": (-108, 4),
+           "rrf_k24": (-72, -11), "sent_rrf_k24": (5, -1), "bm25_k12": (-14, -12), "bm25_k24": (5, -4)}.get(c, (4, 2))
+    lab = LABEL[c].replace("{=}", "=").replace("$", "")
+    right = {"sent_nomin_k24": 0.886, "sent_rrf_k24": 0.868, "nomin_k24": 0.850, "rrf_k24": 0.832}
+    if c in right:
+        ax[1].annotate(lab, (d["ncand"], d["cr"]), xytext=(33.2, right[c]), textcoords="data", fontsize=5.6, color="#333333", va="center",
+                       arrowprops=dict(arrowstyle="-", color="#9a9a9a", lw=0.5))
+    else:
+        ax[1].annotate(lab, (d["ncand"], d["cr"]), textcoords="offset points", xytext=off, fontsize=5.6, color="#333333")
 ax[1].set_xlabel(f"mean candidates shown ($N={MAIN}$)")
+ax[1].set_xlim(11, 45)
 ax[1].set_ylabel("target in the extractor's prompt")
-ax[1].set_title("(b) Reachability against candidates shown", fontsize=8)
+ax[1].set_title("(b) Reachability against candidates shown (x: BM25 / fused)", fontsize=8)
 ax[1].grid(color="#e5e5e5", lw=0.6)
 fig.tight_layout()
 fig.savefig(os.path.join(PAPER, "figures", "fig9_selection.pdf"))

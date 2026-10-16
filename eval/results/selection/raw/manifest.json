@@ -80,6 +80,34 @@
         "floor": 0,
         "k": 24,
         "kCue": 24
+      },
+      "bm25_k12": {
+        "rank": "bm25",
+        "sentences": false,
+        "floor": null,
+        "k": 12,
+        "kCue": 12
+      },
+      "bm25_k24": {
+        "rank": "bm25",
+        "sentences": false,
+        "floor": null,
+        "k": 24,
+        "kCue": 24
+      },
+      "rrf_k24": {
+        "rank": "rrf",
+        "sentences": false,
+        "floor": null,
+        "k": 24,
+        "kCue": 24
+      },
+      "sent_rrf_k24": {
+        "rank": "rrf",
+        "sentences": true,
+        "floor": null,
+        "k": 24,
+        "kCue": 24
       }
     },
     "serverModes": [
@@ -93,32 +121,42 @@
       "seed": 12345
     },
     "alpha": 0.05,
-    "mainStoreSize": 350
+    "mainStoreSize": 350,
+    "addedConditions": {
+      "conditions": [
+        "bm25_k12",
+        "bm25_k24",
+        "rrf_k24",
+        "sent_rrf_k24"
+      ],
+      "addedAt": "2026-10-16",
+      "note": "Added after the pre-registered study, as baselines a reviewer would ask for; analysed as a separate, Holm-corrected family."
+    }
   },
   "chunks": [
     {
       "start": 0,
-      "count": 4,
-      "startedAt": "2026-10-16T16:28:29.523Z",
+      "count": 15,
+      "startedAt": "2026-10-16T17:07:46.466Z",
       "node": "v22.23.2",
       "platform": "linux-x64",
-      "finishedAt": "2026-10-16T16:29:09.561Z"
+      "finishedAt": "2026-10-16T17:09:51.375Z"
     },
     {
-      "start": 4,
-      "count": 18,
-      "startedAt": "2026-10-16T16:29:13.835Z",
+      "start": 15,
+      "count": 16,
+      "startedAt": "2026-10-16T17:09:55.916Z",
       "node": "v22.23.2",
       "platform": "linux-x64",
-      "finishedAt": "2026-10-16T16:31:27.476Z"
+      "finishedAt": "2026-10-16T17:12:06.244Z"
     },
     {
-      "start": 22,
-      "count": 18,
-      "startedAt": "2026-10-16T16:31:32.411Z",
+      "start": 31,
+      "count": 9,
+      "startedAt": "2026-10-16T17:12:12.854Z",
       "node": "v22.23.2",
       "platform": "linux-x64",
-      "finishedAt": "2026-10-16T16:33:55.409Z"
+      "finishedAt": "2026-10-16T17:13:30.394Z"
     }
   ]
 }

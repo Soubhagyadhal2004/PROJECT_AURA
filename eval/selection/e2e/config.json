@@ -1,0 +1,10 @@
+{
+  "storeSize": 100,
+  "conditions": ["default", "adaptive", "nomin_k24", "oracle_target"],
+  "policies": ["gate"],
+  "noopTurns": 4,
+  "newFactTurns": 2,
+  "personas": 8,
+  "reviewer": "oracle: accepts a proposal only if it targets the current row of the slot being changed, with the right action, and (for updates) mentions the new value; rejects everything else",
+  "notes": "oracle_target = default candidates plus the true target row when it is missing (diagnostic upper bound, not a method)"
+}
