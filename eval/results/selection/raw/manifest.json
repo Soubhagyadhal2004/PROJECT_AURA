@@ -1,0 +1,124 @@
+{
+  "serverMemorySha256": "20a1f706a233512ab95b0c51263e2d1434a1d91a0d498be25e3c5e4537cc873b",
+  "embedModel": "Xenova/all-MiniLM-L6-v2 (q8)",
+  "config": {
+    "personas": 40,
+    "personaSeedStart": 1,
+    "storeSizes": [
+      0,
+      25,
+      50,
+      100,
+      200,
+      350
+    ],
+    "similarDistractorShare": 0.3,
+    "recent": 8,
+    "conditions": {
+      "default": {
+        "sentences": false,
+        "floor": 0.25,
+        "k": 12,
+        "kCue": 12
+      },
+      "nomin": {
+        "sentences": false,
+        "floor": 0,
+        "k": 12,
+        "kCue": 12
+      },
+      "sentence": {
+        "sentences": true,
+        "floor": 0.25,
+        "k": 12,
+        "kCue": 12
+      },
+      "adaptive": {
+        "sentences": true,
+        "floor": 0,
+        "k": 12,
+        "kCue": 24
+      },
+      "sent_nomin": {
+        "sentences": true,
+        "floor": 0,
+        "k": 12,
+        "kCue": 12
+      },
+      "cue_k": {
+        "sentences": false,
+        "floor": 0.25,
+        "k": 12,
+        "kCue": 24
+      },
+      "nomin_cue_k": {
+        "sentences": false,
+        "floor": 0,
+        "k": 12,
+        "kCue": 24
+      },
+      "sent_cue_k": {
+        "sentences": true,
+        "floor": 0.25,
+        "k": 12,
+        "kCue": 24
+      },
+      "default_k24": {
+        "sentences": false,
+        "floor": 0.25,
+        "k": 24,
+        "kCue": 24
+      },
+      "nomin_k24": {
+        "sentences": false,
+        "floor": 0,
+        "k": 24,
+        "kCue": 24
+      },
+      "sent_nomin_k24": {
+        "sentences": true,
+        "floor": 0,
+        "k": 24,
+        "kCue": 24
+      }
+    },
+    "serverModes": [
+      "default",
+      "nomin",
+      "sentence",
+      "adaptive"
+    ],
+    "bootstrap": {
+      "resamples": 10000,
+      "seed": 12345
+    },
+    "alpha": 0.05,
+    "mainStoreSize": 350
+  },
+  "chunks": [
+    {
+      "start": 0,
+      "count": 4,
+      "startedAt": "2026-10-16T16:28:29.523Z",
+      "node": "v22.23.2",
+      "platform": "linux-x64",
+      "finishedAt": "2026-10-16T16:29:09.561Z"
+    },
+    {
+      "start": 4,
+      "count": 18,
+      "startedAt": "2026-10-16T16:29:13.835Z",
+      "node": "v22.23.2",
+      "platform": "linux-x64",
+      "finishedAt": "2026-10-16T16:31:27.476Z"
+    },
+    {
+      "start": 22,
+      "count": 18,
+      "startedAt": "2026-10-16T16:31:32.411Z",
+      "node": "v22.23.2",
+      "platform": "linux-x64",
+      "finishedAt": "2026-10-16T16:33:55.409Z"
+    }
+  ]
+}
