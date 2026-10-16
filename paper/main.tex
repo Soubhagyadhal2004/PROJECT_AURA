@@ -14,7 +14,7 @@
 \hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
 \makeatletter
 \@ifundefined{IEEEkeywords}{\newenvironment{IEEEkeywords}{\par\small\textbf{Index Terms---}}{\par}}{}
-\@ifundefined{IEEEauthorblockN}{\newcommand{\IEEEauthorblockN}[1]{#1\\}\newcommand{\IEEEauthorblockA}[1]{#1}}{}
+\ifdefined\HAVEIEEE\else\@ifundefined{IEEEauthorblockN}{\newcommand{\IEEEauthorblockN}[1]{#1\\}\newcommand{\IEEEauthorblockA}[1]{#1}}{}\fi
 \makeatother
 \providecommand{\appendices}{\appendix}
 \input{numbers.tex}
@@ -26,8 +26,14 @@
 
 \title{A Review Gate Stops Wrong Memory Writes but Not Missed Updates: Candidate Selection in User-Controlled Long-Term Memory for LLM Assistants}
 
-\author{\IEEEauthorblockN{[Author name]}
-\IEEEauthorblockA{Affiliation and e-mail to be added}}
+\author{
+\begin{tabular}[t]{@{}c@{\hspace{1.2em}}c@{\hspace{1.2em}}c@{\hspace{1.2em}}c@{}}
+\begin{tabular}[t]{@{}c@{}}{\normalsize Radha Mohan Pattanayak}\\[2pt]{\small Associate Professor, SCOPE}\\{\small VIT-AP University}\\{\small Amaravati, India}\\{\footnotesize radhamohan.pattanayak@vitap.ac.in}\end{tabular} &
+\begin{tabular}[t]{@{}c@{}}{\normalsize Soubhagya Swastik Dhal}\\[2pt]{\small B.Tech (Computer Science}\\{\small \& Engineering)}\\{\small VIT-AP University}\\{\small Amaravati, India}\\{\footnotesize soubhagya3696@gmail.com}\end{tabular} &
+\begin{tabular}[t]{@{}c@{}}{\normalsize Basant Kumar}\\[2pt]{\small B.Tech (Computer Science}\\{\small \& Engineering)}\\{\small VIT-AP University}\\{\small Amaravati, India}\\{\footnotesize gbasant201036@gmail.com}\end{tabular} &
+\begin{tabular}[t]{@{}c@{}}{\normalsize Mehal Mathur}\\[2pt]{\small B.Tech (Computer Science}\\{\small \& Engineering)}\\{\small VIT-AP University}\\{\small Amaravati, India}\\{\footnotesize mehalmathur24@gmail.com}\end{tabular}\\[10pt]
+\begin{tabular}[t]{@{}c@{}}{\normalsize Aditya Kumar Jena}\\[2pt]{\small B.Tech (Computer Science}\\{\small \& Engineering)}\\{\small VIT-AP University}\\{\small Amaravati, India}\\{\footnotesize adi.jena1904@gmail.com}\end{tabular} & & &
+\end{tabular}}
 
 \maketitle
 
@@ -509,39 +515,39 @@ The evaluation harness (\texttt{eval/}), the persona generator, all raw per-run 
 \section{Complete Policy Results}
 Table~\ref{tab:apppol} gives all metrics of the policy comparison for all error rates.
 
-\begin{table*}[t]
+\begin{table}[!ht]
 \centering\footnotesize
 \caption{All policies, all extractor error rates (simulated, $u=0.05$; mean per persona).}
 \label{tab:apppol}
 \adjustbox{max width=\linewidth}{\input{tables/app_policies.tex}}
-\end{table*}
+\end{table}
 
 \section{Complete Ablation Results}
 Tables~\ref{tab:appgate} and~\ref{tab:appauto} give every cell of the simulated ablation. An asterisk marks a sign-test $p<0.05$ against the baseline (uncorrected; 210 tests in all). The upper three blocks vary the extractor error rate ($u=0.05$), the lower four the user slip rate ($e=0.1$; gate only).
 
-\begin{table*}[t]
+\begin{table}[!ht]
 \centering\footnotesize
 \caption{Ablation, gate policy: all cells (60 paired persona runs each). * : uncorrected $p<0.05$.}
 \label{tab:appgate}
 \adjustbox{max width=\linewidth}{\input{tables/app_abl_gate.tex}}
-\end{table*}
+\end{table}
 
-\begin{table*}[t]
+\begin{table}[!ht]
 \centering\footnotesize
 \caption{Ablation, auto-apply policy: error-rate cells (60 paired persona runs each). * : uncorrected $p<0.05$.}
 \label{tab:appauto}
 \adjustbox{max width=\linewidth}{\input{tables/app_abl_auto.tex}}
-\end{table*}
+\end{table}
 
 \section{Reachability for All Store Sizes}
 Table~\ref{tab:modesfull} gives reachability and mean candidate count for all selection modes, store sizes and turn types.
 
-\begin{table*}[t]
+\begin{table}[!ht]
 \centering\footnotesize
 \caption{Reachability (mean number of candidates) by mode, store size $N$ and turn type.}
 \label{tab:modesfull}
 \adjustbox{max width=\linewidth}{\input{tables/modes_full.tex}}
-\end{table*}
+\end{table}
 
 \section{Reproducing the Results}
 All commands are run from the repository root. Simulated experiments need no API key; real-model experiments need \texttt{GEMINI\_API\_KEY} and internet access.
