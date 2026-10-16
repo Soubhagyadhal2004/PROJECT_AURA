@@ -13,7 +13,7 @@
 //   2. GEMINI_API_KEY in .env, as for Experiment 4.
 //
 //   npm run eval:lme                          shows the plan and the number of requests, sends nothing
-//   npm run eval:lme -- --yes                 runs it (30 questions x policies; see the plan for the count)
+//   npm run eval:lme -- --yes                 runs it (78 questions x policies by default; see the plan for the count)
 //   npm run eval:lme -- --out <folder> --yes  continues an interrupted run
 //   npm run eval:lme -- --check-with-sim      no Gemini, no dataset: tests the plumbing on a made-up fixture
 //
@@ -49,7 +49,7 @@ const { values: a } = parseArgs({
   options: {
     data: { type: "string", default: path.join(EVAL_DIR, "data", "longmemeval_s_cleaned.json") },
     types: { type: "string", default: "knowledge-update" },
-    questions: { type: "string", default: "30" },
+    questions: { type: "string" }, // default: all 78 knowledge-update questions; a resumed run keeps the number it started with
     distractors: { type: "string", default: "3" },
     policies: { type: "string", default: "append,auto,gate" },
     baselines: { type: "string", default: "none,context" },
@@ -99,7 +99,14 @@ const data = loadData();
 const types = new Set(list(a.types));
 let pool = data.filter((q) => (types.has("all") || types.has(q.question_type)) && !String(q.question_id).endsWith("_abs"));
 pool.forEach(validate);
-pool = pool.sort((x, y) => hash(`${x.question_id}|${a.seed}`) - hash(`${y.question_id}|${a.seed}`)).slice(0, Number(a.questions));
+pool = pool.sort((x, y) => hash(`${x.question_id}|${a.seed}`) - hash(`${y.question_id}|${a.seed}`));
+// number of questions: --questions if given, else the number the run in --out was started with, else all (78).
+// The order is fixed by the seed, so a larger number only adds questions; finished ones are kept and skipped.
+const out = outDir(EVAL_DIR, check ? "lme-check" : "longmemeval", a.out);
+const cfgFile = path.join(out, "config.json");
+const savedCfg = fs.existsSync(cfgFile) ? JSON.parse(fs.readFileSync(cfgFile, "utf8")) : null;
+const wanted = a.questions != null ? Number(a.questions) : savedCfg?.questions ?? 78;
+pool = pool.slice(0, wanted);
 
 function sessionsFor(q) {
   const ids = q.haystack_session_ids;
@@ -115,15 +122,13 @@ function sessionsFor(q) {
 }
 
 // ---------- config and plan ----------
-const out = outDir(EVAL_DIR, check ? "lme-check" : "longmemeval", a.out);
-const cfgFile = path.join(out, "config.json");
 const baselines = list(a.baselines);
 const policies = list(a.policies);
 const noJudge = a["no-judge"];
 
 const env = await openIsolated({ clock: "real" });
-const cfg = fs.existsSync(cfgFile)
-  ? JSON.parse(fs.readFileSync(cfgFile, "utf8"))
+const cfg = savedCfg
+  ? { ...savedCfg, questions: pool.length }
   : {
       experiment: check ? "lme-check" : "longmemeval",
       dataFile: check ? "made-up fixture (lib/lme-fixture.mjs)" : path.basename(a.data),
@@ -171,6 +176,7 @@ if (!check) {
   }
 }
 if (!fs.existsSync(cfgFile)) writeJSON(cfgFile, { ...cfg, startedAt: new Date().toISOString() });
+else if (savedCfg && savedCfg.questions !== cfg.questions) writeJSON(cfgFile, { ...savedCfg, questions: cfg.questions, extendedAt: new Date().toISOString() });
 
 // ---------- simulated clock (memory timestamps follow the session dates; "today" in prompts too) ----------
 let clockT = Date.UTC(2023, 0, 1);

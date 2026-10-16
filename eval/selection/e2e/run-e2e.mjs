@@ -124,6 +124,7 @@ const rowsNow = () => db.prepare("SELECT id, content, status, superseded_by FROM
 const mentions = (text, v) => new RegExp(`\\b${v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
 
 async function runOne(persona, cond, policy) {
+  const buf = []; // turn records are written only if the whole run had no error (see the main loop)
   mem.deleteAllMemories();
   db.prepare("DELETE FROM memory_proposals").run();
   let clock = 1;
@@ -230,7 +231,7 @@ async function runOne(persona, cond, policy) {
       rec.error = String(e?.message || e);
     }
     history.push({ role: "user", text });
-    turnsOut.write(JSON.stringify(rec) + "\n");
+    buf.push(rec);
   }
   const rows = rowsNow();
   const active = rows.filter((x) => x.status === "active");
@@ -241,18 +242,30 @@ async function runOne(persona, cond, policy) {
     const hasTrue = tr.value ? active.some((x) => mentions(x.content, tr.value)) : null;
     slots[f.slot] = { state: tr.state, value: tr.value, stale: stale ? 1 : 0, hasTrue: hasTrue == null ? null : hasTrue ? 1 : 0, changed: changedSlots.has(f.slot) };
   }
-  finalOut.write(JSON.stringify({ persona: persona.id, cond, policy, slots, rows }) + "\n");
+  const errors = buf.filter((r) => r.error).length;
+  if (errors === 0) {
+    for (const r of buf) turnsOut.write(JSON.stringify(r) + "\n");
+    finalOut.write(JSON.stringify({ persona: persona.id, cond, policy, slots, rows }) + "\n");
+  } else {
+    fs.appendFileSync(path.join(outDir, "failed_turns.jsonl"), buf.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  }
+  return { errors, firstError: buf.find((r) => r.error)?.error };
 }
 
 const tStart = Date.now();
 for (let p = start; p < start + nPersonas; p++) {
   // same generator settings as the selection study, so events are identical; the first N distractors are used
   const persona = buildPersona(reachCfg.personaSeedStart + p, { maxDistractors: Math.max(...reachCfg.storeSizes), similarShare: reachCfg.similarDistractorShare });
-  for (const cond of conditions)
+  outer: for (const cond of conditions)
     for (const policy of policies) {
       const key = `${persona.id}|${cond}|${policy}|N${N}`;
       if (done.has(key)) continue;
-      await runOne(persona, cond, policy);
+      const res = await runOne(persona, cond, policy);
+      if (res.errors > 0) {
+        console.log(`${key} FAILED: ${res.errors} turn(s) with an error (${String(res.firstError).slice(0, 120)}). Not saved, not marked done. Stopping; wait for the quota to reset and run the same command again.`);
+        process.exitCode = 2;
+        break outer;
+      }
       doneOut.write(JSON.stringify({ key, at: new Date().toISOString() }) + "\n");
       console.log(`${key} done (${((Date.now() - tStart) / 1000).toFixed(0)} s, ${gem.usage.calls} model calls, ${gem.usage.promptTokens} prompt tokens)`);
     }
