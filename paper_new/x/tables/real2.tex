@@ -1,0 +1,11 @@
+\begin{tabular}{llccccc}
+\toprule
+policy & variant & F1 & stale & false & prompts/100 & prompt tokens ($\times10^3$) \\
+\midrule
+auto & baseline & 0.840 & 0.92 & 0.00 & 0.0 & 13.2 \\
+ & F1+F2 & 0.892 (+0.053, 0.012) & 0.00 ($-$0.92, \ensuremath{<}0.001) & 0.00 (+0.00, 1.000) & 0.0 & 18.1 \\
+\addlinespace[2pt]
+gate & baseline & 0.845 & 1.08 & 0.00 & 24.5 & 13.3 \\
+ & F1+F2 & 0.901 (+0.057, 0.002) & 0.00 ($-$1.08, 0.002) & 0.00 (+0.00, 1.000) & 26.0 & 18.4 \\
+\bottomrule
+\end{tabular}
