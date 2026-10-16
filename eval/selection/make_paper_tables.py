@@ -58,6 +58,11 @@ for c in CFG["conditions"]:
     s, fl, k = DESC[c]
     lines.append(f"{LABEL[c]} & {ROLE[c]} & {s} & {fl} & {k} & {f3(d['cr'])} [{f3(d['lo'])}, {f3(d['hi'])}] & {d['ncand']:.1f} & "
                  f"{f3(brk('single', c)['cr'])} / {f3(brk('mixed', c)['cr'])} / {f3(brk('cue-free', c)['cr'])} \\\\")
+RRP0 = os.path.join(ROOT, "eval", "results", "selection", "processed", "rerank_summary.json")
+if os.path.exists(RRP0):
+    R0 = json.load(open(RRP0))
+    lines.append(f"cross-encoder rerank of top 50, $k{{=}}24$ & reranker & no & -- & 24 & {f3(R0['rerank'][0])} [{f3(R0['rerank'][1])}, {f3(R0['rerank'][2])}] & {R0['rerankCand']:.1f} & "
+                 f"{f3(R0['rerank_single'])} / {f3(R0['rerank_mixed'])} / {f3(R0['rerank_cue-free'])} \\\\")
 lines += [r"\bottomrule", r"\end{tabular}"]
 open(os.path.join(PAPER, "tables", "sel_main.tex"), "w").write("\n".join(lines) + "\n")
 
@@ -120,6 +125,18 @@ for d, key in zip(S.get("baselines", []), ["BmVsDef", "BmVsNk", "RrfVsNk", "Sent
     m += mac(f"selB{key}", f"{d['diff']:+.3f}") + mac(f"selB{key}Lo", f"{d['lo']:+.3f}") + mac(f"selB{key}Hi", f"{d['hi']:+.3f}") + mac(f"selB{key}P", pf(d["p_holm"]))
     m += mac(f"selB{key}Pos", d["pos"]) + mac(f"selB{key}Neg", d["neg"])
 m += mac("selNConditions", len(CFG["conditions"]))
+# cross-encoder reranker (run-rerank.mjs; run on a machine with internet access), N = 350 only
+RRP = os.path.join(ROOT, "eval", "results", "selection", "processed", "rerank_summary.json")
+if os.path.exists(RRP):
+    R = json.load(open(RRP))
+    m += mac("selRerank", f3(R["rerank"][0])) + mac("selRerankLo", f3(R["rerank"][1])) + mac("selRerankHi", f3(R["rerank"][2]))
+    m += mac("selRerankCand", f"{R['rerankCand']:.1f}") + mac("selRerankPool", f3(R["inPool"]))
+    m += mac("selRerankSingle", f3(R["rerank_single"])) + mac("selRerankMixed", f3(R["rerank_mixed"])) + mac("selRerankFree", f3(R["rerank_cue-free"]))
+    m += mac("selMissedAllRerankPct", f"{100 * R['missedByAllInclRerank']:.1f}")
+    for c, key in [("default", "Def"), ("nomin_k24", "Nk"), ("adaptive", "Ada"), ("sent_nomin_k24", "Snk"), ("rrf_k24", "Rrf")]:
+        d = R[f"rerank vs {c}"]
+        m += mac(f"selR{key}", f"{d['diff']:+.3f}") + mac(f"selR{key}Lo", f"{d['lo']:+.3f}") + mac(f"selR{key}Hi", f"{d['hi']:+.3f}")
+        m += mac(f"selR{key}P", pf(d["p_holm"])) + mac(f"selR{key}Pos", d["pos"]) + mac(f"selR{key}Neg", d["neg"])
 m += mac("selCandSaving", f"{100 * (1 - byn(MAIN, 'adaptive')['ncand'] / byn(MAIN, 'nomin_k24')['ncand']):.0f}")
 m += mac("selMissedAll", f3(diag[MAIN]["missed_by_all"])) + mac("selMissedAllPct", f"{100 * diag[MAIN]['missed_by_all']:.1f}")
 m += mac("selLostFloor", f3(diag[MAIN]["lost_to_floor"])) + mac("selRtwelve", f3(diag[MAIN]["R12_whole_nofloor"])) + mac("selRtwentyfour", f3(diag[MAIN]["R24_whole_nofloor"]))

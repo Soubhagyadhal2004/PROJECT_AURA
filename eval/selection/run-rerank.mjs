@@ -96,5 +96,6 @@ for (let p = start; p < Math.min(nPersonas, start + count); p++) {
 }
 manifest.chunks[manifest.chunks.length - 1].finishedAt = new Date().toISOString();
 fs.writeFileSync(manPath, JSON.stringify(manifest, null, 2));
-fs.rmSync(scratch, { recursive: true, force: true });
+try { db.close(); } catch {}
+try { fs.rmSync(scratch, { recursive: true, force: true }); } catch { console.log(`note: could not remove the temporary folder ${scratch} (Windows keeps the database file open); results are complete`); }
 console.log("done");

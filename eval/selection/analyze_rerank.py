@@ -22,6 +22,14 @@ for c in ["default", "nomin_k24", "adaptive", "sent_nomin_k24", "rrf_k24"]:
     if c in rows[0]["conds"]:
         d = A.paired(rer, A.per_persona(rows, c))
         out[f"rerank vs {c}"] = d
+comps = [k for k in out if k.startswith("rerank vs")]
+for k, ph in zip(comps, A.holm([out[k]["p"] for k in comps])):
+    out[k]["p_holm"] = ph
+for g, pred in [("single", lambda r: r["context"] == "single"), ("mixed", lambda r: r["context"] == "mixed"), ("cue-free", lambda r: not r["cue"])]:
+    xs = [r["final"] for r in rr if pred(r)]
+    out[f"rerank_{g}"] = sum(xs) / len(xs)
+rrmap = {r["event"]: r for r in rr}
+out["missedByAllInclRerank"] = sum(1 for r in rows if all(not v["final"] for v in r["conds"].values()) and not rrmap[r["event"]]["final"]) / len(rows)
 os.makedirs(os.path.join(A.OUT, "processed"), exist_ok=True)
 json.dump(out, open(os.path.join(A.OUT, "processed", "rerank_summary.json"), "w"), indent=1)
 print(json.dumps(out, indent=1))

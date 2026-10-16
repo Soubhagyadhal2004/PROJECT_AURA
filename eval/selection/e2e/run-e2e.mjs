@@ -261,5 +261,6 @@ await Promise.all([turnsOut, finalOut, doneOut].map((s) => new Promise((r) => s.
 const last = manifest.runs[manifest.runs.length - 1];
 Object.assign(last, { finishedAt: new Date().toISOString(), modelCalls: gem.usage.calls, promptTokens: gem.usage.promptTokens, outputTokens: gem.usage.outputTokens });
 fs.writeFileSync(manPath, JSON.stringify(manifest, null, 2));
-fs.rmSync(scratch, { recursive: true, force: true });
+try { db.close(); } catch {}
+try { fs.rmSync(scratch, { recursive: true, force: true }); } catch { console.log(`note: could not remove the temporary folder ${scratch} (Windows keeps the database file open); results are complete`); }
 console.log("done");
