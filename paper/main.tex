@@ -11,6 +11,7 @@
 \usepackage[hyphens]{url}
 \usepackage{cite}
 \usepackage{hyperref}
+\usepackage{placeins}
 \hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
 \makeatletter
 \@ifundefined{IEEEkeywords}{\newenvironment{IEEEkeywords}{\par\small\textbf{Index Terms---}}{\par}}{}
@@ -270,6 +271,7 @@ Fig.~\ref{fig:policies} and Table~\ref{tab:policies} compare the four policies o
 \adjustbox{max width=\linewidth}{\input{tables/slip.tex}}
 \end{table}
 
+\FloatBarrier
 \section{Results: Does Memory Search Find the Right Memory?}
 \label{sec:retrieval}
 Candidate selection builds on memory search, so we first measured search alone. Each store holds one persona's current facts plus $N\in\{25,100,350\}$ unrelated facts; every stored fact is asked about with two natural questions (``Which company do I work for?''), \retrQueries\ queries in all over 20 personas and 3 seeds. A query is a hit when the right memory is among the top six results. We compare AURA's hybrid score with the 0.25 minimum, the same score without a minimum, embeddings only and keywords only (the fallback used when the embedding model is unavailable). A check that re-scoring reproduces AURA's real top-six lists succeeded for all queries (differences only from ties).
@@ -439,6 +441,7 @@ Table~\ref{tab:simabl} and Fig.~\ref{fig:abl} give the paired ablation under the
 \label{fig:abl}
 \end{figure*}
 
+\FloatBarrier
 \section{Results: Real Gemini Extractors}
 \label{sec:real}
 Table~\ref{tab:real1} and Fig.~\ref{fig:real} give the same ablation with a real extractor (12 personas, one seed, oracle user). Table~\ref{tab:real2} repeats baseline and F1+F2 with a second model.
@@ -538,6 +541,7 @@ Table~\ref{tab:agree} shows the agreement of the automatic labels with the autho
 \adjustbox{max width=\linewidth}{\input{tables/agreement.tex}}
 \end{table}
 
+\FloatBarrier
 \section{External Check: LongMemEval}
 \label{sec:lme}
 LongMemEval's knowledge-update questions ask for the latest value of a fact that changed during the history \cite{wu2024longmemeval}. We took \lmeQ\ such questions of the ``S'' setting and played each with all evidence sessions plus three random distractor sessions (the same for every system) through \aura's extractor, store and search; answers come from the ten memories that \aura's search returns, and are graded by a Gemini judge written after the benchmark's rule (the official prompt is not reproduced) and by string match. All runs use \texttt{gemini-3.5-flash-lite}. There is no label for which memory changes are right, so the gate's reviewer is an oracle approximation: it accepts proposals made while reading an evidence session and rejects the rest. This gate figure is therefore an upper-bracket, not a measurement of real users. Baselines are answering with no memory and with the raw sessions as context.
@@ -558,6 +562,7 @@ LongMemEval's knowledge-update questions ask for the latest value of a fact that
 
 Table~\ref{tab:lme} and Fig.~\ref{fig:lme} show no measurable effect of the F1+F2 selection on this benchmark. The gate system scores \lmegateBase\ in the baseline run and \lmegateBoth\ in the F1+F2 run (\lmeGateB\ questions worse, \lmeGateC\ better, $p=\lmegateP$); append-only and auto-apply also do not differ between the runs (\lmeappendP\ and \lmeautoP). The systems without memory or with full context, which the selection cannot affect, differ by \lmecontextDiff\ between the two runs, which indicates the run-to-run noise of the answering and judging model. A smaller earlier run on the first 30 of these questions had suggested a gain for the gate (0.267 to 0.433, $p=0.063$); on all \lmeQ\ questions it is absent, and we regard the earlier difference as noise. Full-context answering (\lmecontextBoth\ in the second run) remains far above the gate system (\lmegateBoth; \lmeCtxGateB\ vs.\ \lmeCtxGateC\ discordant questions, $p=\lmeCtxGateP$): a memory system trades accuracy for the properties it provides, such as small prompts, forgetting and user control. Three reasons make this benchmark a weak test of the selection: each question is played with only a handful of sessions, so the store holds about ten memories and the default selection can already show nearly all of them; answers are limited by what the extractor stores as much as by what it updates (the reference answer was in an active memory for only \lmeAnswerInMem\ of questions under the gate); and the gate's reviewer is an oracle approximation. It therefore shows that the selection does not hurt, not that it helps.
 
+\FloatBarrier
 \section{Discussion}
 \label{sec:discussion}
 \textbf{Where the guarantee ends.} The gate provides a guarantee about what is \emph{written}: nothing changes without approval. It provides none about what is \emph{proposed}. In our experiments the second quantity depends on a component that looks like plumbing, the choice of candidate memories, and with default settings it is the main reason that stale facts remain. Evaluating a user-controlled memory by its write accuracy or by the number of approvals alone would miss this.
@@ -587,6 +592,7 @@ A review gate on memory changes is effective against the errors it can see: in o
 The evaluation harness (\texttt{eval/}), both persona generators, all raw per-run files and the scripts that produce every table and figure of this paper (\texttt{eval/make\_paper\_assets.py} and \texttt{eval/selection/make\_paper\_tables.py}) are in the \aura\ project repository. Numbers in the text are generated from the result folders.
 
 \appendices
+\FloatBarrier
 \section{Scoring Rules and Labels}
 \label{app:scoring}
 \textbf{Value matching.} Each persona slot has a set of possible values (for example the gym slot has ``6 am'', ``7 am'', ``6 pm'', ``8 pm''), each with alternative spellings (``6am'', ``6:00 am'', ``18:00''); birthdays accept ``12 March'', ``March 12'', ``12th March'' and so on; coffee values accept ``black coffee'' or ``oat milk''. A value is matched as a whole word, case-insensitively. Distractor values (a hypothetical city, a friend's car) have their own matchers.
@@ -605,6 +611,7 @@ Table~\ref{tab:apppol} gives all metrics of the policy comparison for all error 
 \adjustbox{max width=\linewidth}{\input{tables/app_policies.tex}}
 \end{table}
 
+\FloatBarrier
 \section{Complete Ablation Results}
 Tables~\ref{tab:appgate} and~\ref{tab:appauto} give every cell of the simulated ablation. An asterisk marks a sign-test $p<0.05$ against the baseline (uncorrected; 210 tests in all). The upper three blocks vary the extractor error rate ($u=0.05$), the lower four the user slip rate ($e=0.1$; gate only).
 
@@ -622,6 +629,7 @@ Tables~\ref{tab:appgate} and~\ref{tab:appauto} give every cell of the simulated 
 \adjustbox{max width=\linewidth}{\input{tables/app_abl_auto.tex}}
 \end{table}
 
+\FloatBarrier
 \section{Reachability for All Store Sizes}
 Table~\ref{tab:modesfull} gives reachability and mean candidate count for all selection modes, store sizes and turn types.
 
@@ -632,6 +640,7 @@ Table~\ref{tab:modesfull} gives reachability and mean candidate count for all se
 \adjustbox{max width=\linewidth}{\input{tables/modes_full.tex}}
 \end{table}
 
+\FloatBarrier
 \section{Selection Study for All Store Sizes}
 Table~\ref{tab:selsize} gives reachability for every condition of the selection study and every store size, with the retrieval diagnostics of Sec.~\ref{sec:selection}.
 
@@ -642,6 +651,7 @@ Table~\ref{tab:selsize} gives reachability for every condition of the selection 
 \adjustbox{max width=\linewidth}{\input{tables/sel_bysize.tex}}
 \end{table}
 
+\FloatBarrier
 \section{Reproducing the Results}
 All commands are run from the repository root. Simulated experiments need no API key; real-model experiments need \texttt{GEMINI\_API\_KEY} and internet access.
 \begin{itemize}\setlength\itemsep{0pt}
