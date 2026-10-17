@@ -1,0 +1,361 @@
+policy,kind,qid,qtype,sessions,evidenceSessions,judged,strict,goldInActive,goldInTop,activeN,inactiveN,prompts,accepted,rejected,requests,promptTokens,outputTokens,gold,response
+none,baseline,6a1eabeb,knowledge-update,5,2,0,0,,,,,0,0,0,2,228,23,25 minutes and 50 seconds (or 25:50),I do not know.
+context,baseline,6a1eabeb,knowledge-update,5,2,1,0,,,,,0,0,0,2,9524,24,25 minutes and 50 seconds (or 25:50),25:50
+append,policy,6a1eabeb,knowledge-update,5,2,1,0,0,0,9,0,0,0,0,7,11626,481,25 minutes and 50 seconds (or 25:50),25:50
+auto,policy,6a1eabeb,knowledge-update,5,2,1,0,0,0,6,1,0,0,0,7,11460,392,25 minutes and 50 seconds (or 25:50),25:50
+gate,policy,6a1eabeb,knowledge-update,5,2,1,0,0,0,6,1,1,1,0,7,11439,392,25 minutes and 50 seconds (or 25:50),25:50
+none,baseline,0977f2af,knowledge-update,5,2,0,0,,,,,0,0,0,2,214,23,Instant Pot,I do not know.
+context,baseline,0977f2af,knowledge-update,5,2,1,1,,,,,0,0,0,2,9232,21,Instant Pot,Instant Pot
+append,policy,0977f2af,knowledge-update,5,2,0,0,1,1,6,0,0,0,0,7,11085,327,Instant Pot,I do not know.
+auto,policy,0977f2af,knowledge-update,5,2,0,0,1,1,6,0,0,0,0,7,11099,330,Instant Pot,I do not know.
+gate,policy,0977f2af,knowledge-update,5,2,0,0,0,0,4,0,0,0,0,7,10973,272,Instant Pot,I do not know.
+none,baseline,031748ae,knowledge-update,5,2,0,0,,,,,0,0,0,2,259,23,"When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers",I do not know.
+context,baseline,031748ae,knowledge-update,5,2,0,0,,,,,0,0,0,2,10678,34,"When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers","You led 4 engineers when you started your new role, and you lead 4 engineers now."
+append,policy,031748ae,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,12791,630,"When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers",I do not know how many engineers you led when you just started. You currently lead a team of 5 engineers and a team of 4 engineers.
+auto,policy,031748ae,knowledge-update,5,2,0,0,0,0,10,2,0,0,0,7,12728,618,"When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers","I do not know how many engineers you led when you just started, but you lead 5 engineers now."
+gate,policy,031748ae,knowledge-update,5,2,0,0,0,0,11,1,1,1,0,7,12673,592,"When you just started your new role as Senior Software Engineer, you led 4 engineers. Now, you lead 5 engineers","I do not know how many engineers you led when you just started, but you lead 5 engineers now."
+none,baseline,18bc8abd,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,19,Kansas City Masterpiece,I do not know.
+context,baseline,18bc8abd,knowledge-update,5,2,1,1,,,,,0,0,0,2,11078,23,Kansas City Masterpiece,Kansas City Masterpiece
+append,policy,18bc8abd,knowledge-update,5,2,1,1,1,1,16,0,0,0,0,7,13234,780,Kansas City Masterpiece,Sweet Baby Ray's and Kansas City Masterpiece BBQ sauce
+auto,policy,18bc8abd,knowledge-update,5,2,1,1,1,1,8,1,0,0,0,7,13149,580,Kansas City Masterpiece,Kansas City Masterpiece BBQ sauce
+gate,policy,18bc8abd,knowledge-update,5,2,0,0,0,0,13,0,0,0,0,7,13267,638,Kansas City Masterpiece,Sweet Baby Ray's
+none,baseline,830ce83f,knowledge-update,5,2,0,0,,,,,0,0,0,2,204,23,the suburbs,I do not know.
+context,baseline,830ce83f,knowledge-update,5,2,1,1,,,,,0,0,0,2,7255,20,the suburbs,Rachel moved to the suburbs.
+append,policy,830ce83f,knowledge-update,5,2,0,0,0,0,4,0,0,0,0,7,8954,225,the suburbs,I do not know.
+auto,policy,830ce83f,knowledge-update,5,2,0,0,0,0,2,0,0,0,0,7,8927,146,the suburbs,I do not know.
+gate,policy,830ce83f,knowledge-update,5,2,0,0,0,0,3,1,1,1,0,7,8983,263,the suburbs,I do not know.
+none,baseline,852ce960,knowledge-update,5,2,0,0,,,,,0,0,0,2,228,23,"$400,000",I do not know.
+context,baseline,852ce960,knowledge-update,5,2,0,0,,,,,0,0,0,2,9240,26,"$400,000","$350,000"
+append,policy,852ce960,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,11178,441,"$400,000","$350,000"
+auto,policy,852ce960,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,11174,452,"$400,000","$350,000"
+gate,policy,852ce960,knowledge-update,5,2,0,0,0,0,6,0,1,1,0,7,11063,404,"$400,000","$350,000"
+none,baseline,7401057b,knowledge-update,5,2,0,0,,,,,0,0,0,2,221,23,Two,I do not know.
+context,baseline,7401057b,knowledge-update,5,2,1,1,,,,,0,0,0,2,10434,31,Two,You have accumulated enough points for two free night's stays at any Hilton property.
+append,policy,7401057b,knowledge-update,5,2,0,0,0,0,13,0,0,0,0,7,12764,677,Two,You have accumulated enough Hilton Honors points for a single free night's stay.
+auto,policy,7401057b,knowledge-update,5,2,1,1,1,1,12,1,0,0,0,7,12652,672,Two,You have accumulated enough Hilton points for two free nights' stays.
+gate,policy,7401057b,knowledge-update,5,2,1,1,1,1,9,0,0,0,0,7,12400,448,Two,Two free nights.
+none,baseline,72e3ee87,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,23,50,I do not know.
+context,baseline,72e3ee87,knowledge-update,5,2,1,1,,,,,0,0,0,2,9871,18,50,50 episodes
+append,policy,72e3ee87,knowledge-update,5,2,1,1,1,1,15,0,0,0,0,7,11703,738,50,50
+auto,policy,72e3ee87,knowledge-update,5,2,1,1,1,1,13,2,0,0,0,7,11682,807,50,50 episodes
+gate,policy,72e3ee87,knowledge-update,5,2,1,1,1,1,14,0,0,0,0,7,11701,712,50,50 episodes
+none,baseline,e66b632c,knowledge-update,5,2,0,0,,,,,0,0,0,2,221,15,27 minutes and 45 seconds,I do not know.
+context,baseline,e66b632c,knowledge-update,5,2,0,0,,,,,0,0,0,2,12183,23,27 minutes and 45 seconds,26 minutes and 30 seconds
+append,policy,e66b632c,knowledge-update,5,2,0,0,1,1,9,0,0,0,0,7,14461,581,27 minutes and 45 seconds,I do not know.
+auto,policy,e66b632c,knowledge-update,5,2,0,0,1,1,6,0,0,0,0,7,14314,439,27 minutes and 45 seconds,I do not know.
+gate,policy,e66b632c,knowledge-update,5,2,0,0,1,1,8,0,1,1,0,7,14449,537,27 minutes and 45 seconds,I do not know.
+none,baseline,c4ea545c,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,23,Yes,I do not know.
+context,baseline,c4ea545c,knowledge-update,5,2,0,0,,,,,0,0,0,2,11140,23,Yes,I do not know.
+append,policy,c4ea545c,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,13366,554,Yes,I do not know.
+auto,policy,c4ea545c,knowledge-update,5,2,0,0,0,0,10,1,0,0,0,7,13421,563,Yes,I do not know.
+gate,policy,c4ea545c,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,13369,549,Yes,I do not know.
+none,baseline,dad224aa,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,23,7:30 am,I do not know.
+context,baseline,dad224aa,knowledge-update,5,2,1,1,,,,,0,0,0,2,10356,24,7:30 am,7:30 am
+append,policy,dad224aa,knowledge-update,5,2,0,0,0,0,10,0,0,0,0,7,12572,552,7:30 am,Around 8:30 am.
+auto,policy,dad224aa,knowledge-update,5,2,1,1,1,1,9,1,0,0,0,7,12638,545,7:30 am,Around 7:30 am.
+gate,policy,dad224aa,knowledge-update,5,2,0,0,0,0,8,0,1,1,0,7,12579,493,7:30 am,Around 8:30 am
+none,baseline,07741c45,knowledge-update,5,2,0,0,,,,,0,0,0,2,207,23,in a shoe rack in my closet,I do not know.
+context,baseline,07741c45,knowledge-update,5,2,0,0,,,,,0,0,0,2,10803,22,in a shoe rack in my closet,under my bed
+append,policy,07741c45,knowledge-update,5,2,0,0,0,0,8,0,0,0,0,7,13154,517,in a shoe rack in my closet,I do not know.
+auto,policy,07741c45,knowledge-update,5,2,0,0,0,0,6,0,0,0,0,7,13046,439,in a shoe rack in my closet,I do not know.
+gate,policy,07741c45,knowledge-update,5,2,0,0,0,0,8,0,0,0,0,7,13080,435,in a shoe rack in my closet,I do not know.
+none,baseline,45dc21b6,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,19,3,I do not know.
+context,baseline,45dc21b6,knowledge-update,5,2,1,1,,,,,0,0,0,2,9854,20,3,3
+append,policy,45dc21b6,knowledge-update,5,2,1,1,1,1,8,0,0,0,0,7,11914,422,3,3
+auto,policy,45dc21b6,knowledge-update,5,2,1,1,1,1,10,1,0,0,0,7,12038,562,3,3
+gate,policy,45dc21b6,knowledge-update,5,2,1,1,1,1,9,2,2,2,0,7,12005,568,3,3
+none,baseline,ed4ddc30,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,19,20,I do not know.
+context,baseline,ed4ddc30,knowledge-update,5,2,1,1,,,,,0,0,0,2,8966,19,20,20 dozen eggs
+append,policy,ed4ddc30,knowledge-update,5,2,0,0,1,1,4,0,0,0,0,7,10894,330,20,30 dozen
+auto,policy,ed4ddc30,knowledge-update,5,2,1,1,1,1,4,1,0,0,0,7,10759,285,20,20 dozen
+gate,policy,ed4ddc30,knowledge-update,5,2,1,1,1,1,6,1,1,1,0,7,10790,438,20,20 dozen
+none,baseline,41698283,knowledge-update,5,2,0,0,,,,,0,0,0,2,215,19,a 70-200mm zoom lens,I do not know.
+context,baseline,41698283,knowledge-update,5,2,0,0,,,,,0,0,0,2,10733,24,a 70-200mm zoom lens,50mm prime lens
+append,policy,41698283,knowledge-update,5,2,0,0,1,1,14,0,0,0,0,7,12983,708,a 70-200mm zoom lens,I do not know.
+auto,policy,41698283,knowledge-update,5,2,0,0,1,1,15,1,0,0,0,7,13024,814,a 70-200mm zoom lens,A 50mm prime lens
+gate,policy,41698283,knowledge-update,5,2,0,0,1,1,13,1,1,1,0,7,12954,733,a 70-200mm zoom lens,I do not know.
+none,baseline,4b24c848,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,19,five,I do not know.
+context,baseline,4b24c848,knowledge-update,5,2,1,1,,,,,0,0,0,2,10048,17,five,five tops
+append,policy,4b24c848,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,12257,606,five,I do not know.
+auto,policy,4b24c848,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,12011,483,five,I do not know.
+gate,policy,4b24c848,knowledge-update,5,2,1,1,1,1,7,1,1,1,0,7,12015,418,five,five
+none,baseline,b01defab,knowledge-update,5,2,0,0,,,,,0,0,0,2,207,19,Yes,I do not know.
+context,baseline,b01defab,knowledge-update,5,2,1,1,,,,,0,0,0,2,10419,20,Yes,Yes
+append,policy,b01defab,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,12454,525,Yes,I do not know.
+auto,policy,b01defab,knowledge-update,5,2,1,1,0,0,11,1,0,0,0,7,12458,572,Yes,Yes
+gate,policy,b01defab,knowledge-update,5,2,1,1,0,0,8,1,1,1,0,7,12407,505,Yes,"Yes, you finished reading 'The Nightingale' by Kristin Hannah as of March 2023."
+none,baseline,b6019101,knowledge-update,5,2,0,0,,,,,0,0,0,2,212,23,5,I do not know.
+context,baseline,b6019101,knowledge-update,5,2,1,1,,,,,0,0,0,2,8279,16,5,5
+append,policy,b6019101,knowledge-update,5,2,1,1,1,1,7,0,0,0,0,7,10291,432,5,5 MCU films
+auto,policy,b6019101,knowledge-update,5,2,1,1,1,1,6,1,0,0,0,7,10318,422,5,5 MCU films
+gate,policy,b6019101,knowledge-update,5,2,0,0,0,0,5,0,0,0,0,7,10121,274,5,I do not know.
+none,baseline,cc5ded98,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,19,about two hours,I do not know.
+context,baseline,cc5ded98,knowledge-update,5,2,1,1,,,,,0,0,0,2,9026,20,about two hours,about two hours each day
+append,policy,cc5ded98,knowledge-update,5,2,0,0,1,1,17,0,0,0,0,7,11301,878,about two hours,I do not know.
+auto,policy,cc5ded98,knowledge-update,5,2,1,1,1,1,11,1,0,0,0,7,11327,665,about two hours,About two hours each day.
+gate,policy,cc5ded98,knowledge-update,5,2,1,1,1,1,13,1,1,1,0,7,11320,742,about two hours,About two hours each day.
+none,baseline,6aeb4375,knowledge-update,5,2,0,0,,,,,0,0,0,2,205,23,four,I do not know.
+context,baseline,6aeb4375,knowledge-update,5,2,1,1,,,,,0,0,0,2,11298,25,four,You have tried four different Korean restaurants in your city.
+append,policy,6aeb4375,knowledge-update,5,2,1,1,1,1,9,0,0,0,0,7,13237,472,four,Four.
+auto,policy,6aeb4375,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,13328,527,four,Three
+gate,policy,6aeb4375,knowledge-update,5,2,0,0,1,1,9,1,1,1,0,7,13374,538,four,I do not know.
+none,baseline,a1eacc2a,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,23,seven,I do not know.
+context,baseline,a1eacc2a,knowledge-update,5,2,1,0,,,,,0,0,0,2,10293,20,seven,7
+append,policy,a1eacc2a,knowledge-update,5,2,0,0,0,0,13,0,0,0,0,7,12404,629,seven,Four short stories.
+auto,policy,a1eacc2a,knowledge-update,5,2,1,1,1,1,15,1,0,0,0,7,12432,775,seven,Seven
+gate,policy,a1eacc2a,knowledge-update,5,2,1,1,1,1,11,1,1,1,0,7,12379,631,seven,Seven short stories.
+none,baseline,db467c8c,knowledge-update,5,2,0,0,,,,,0,0,0,2,210,15,nine months,I do not know.
+context,baseline,db467c8c,knowledge-update,5,2,1,1,,,,,0,0,0,2,9182,28,nine months,Your parents have been staying with you in the US for nine months.
+append,policy,db467c8c,knowledge-update,5,2,1,1,1,1,7,0,0,0,0,7,11148,438,nine months,Nine months as of October 2023.
+auto,policy,db467c8c,knowledge-update,5,2,1,1,1,1,4,1,0,0,0,7,11001,324,nine months,Nine months as of October 2023.
+gate,policy,db467c8c,knowledge-update,5,2,1,1,1,1,6,1,1,1,0,7,11188,429,nine months,Nine months as of October 2023.
+none,baseline,945e3d21,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,19,Three times a week.,I do not know.
+context,baseline,945e3d21,knowledge-update,5,2,0,0,,,,,0,0,0,2,9984,18,Three times a week.,twice a week
+append,policy,945e3d21,knowledge-update,5,2,0,0,1,1,13,0,0,0,0,7,12053,751,Three times a week.,I do not know.
+auto,policy,945e3d21,knowledge-update,5,2,0,0,1,1,14,1,0,0,0,7,12186,791,Three times a week.,I do not know
+gate,policy,945e3d21,knowledge-update,5,2,1,1,1,1,11,1,1,1,0,7,12116,661,Three times a week.,You do yoga three times a week.
+none,baseline,5831f84d,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,15,15,I do not know.
+context,baseline,5831f84d,knowledge-update,5,2,1,1,,,,,0,0,0,2,11687,17,15,15
+append,policy,5831f84d,knowledge-update,5,2,1,1,1,1,21,0,0,0,0,7,14182,1060,15,15
+auto,policy,5831f84d,knowledge-update,5,2,1,1,1,1,11,0,0,0,0,7,13899,724,15,15
+gate,policy,5831f84d,knowledge-update,5,2,0,0,0,0,18,1,1,1,0,7,14197,1022,15,You have watched 12 Crash Course videos on computer science as of August 2023.
+none,baseline,0f05491a,knowledge-update,5,2,0,0,,,,,0,0,0,2,220,19,120,I do not know.
+context,baseline,0f05491a,knowledge-update,5,2,1,1,,,,,0,0,0,2,9360,23,120,120 stars
+append,policy,0f05491a,knowledge-update,5,2,0,0,0,0,15,0,0,0,0,7,11704,808,120,You need 125 stars to reach the Gold level on the Starbucks Rewards app.
+auto,policy,0f05491a,knowledge-update,5,2,0,0,0,0,15,0,0,0,0,7,11629,765,120,125 stars
+gate,policy,0f05491a,knowledge-update,5,2,0,0,0,0,15,0,1,1,0,7,11720,807,120,You need 125 stars to reach the Gold level on the Starbucks Rewards app.
+none,baseline,cf22b7bf,knowledge-update,5,2,0,0,,,,,0,0,0,2,216,23,10 pounds,I do not know.
+context,baseline,cf22b7bf,knowledge-update,5,2,1,1,,,,,0,0,0,2,8457,22,10 pounds,10 pounds
+append,policy,cf22b7bf,knowledge-update,5,2,1,1,1,1,8,0,0,0,0,7,10280,454,10 pounds,You have lost 10 pounds since starting to go consistently to the gym.
+auto,policy,cf22b7bf,knowledge-update,5,2,0,0,1,1,7,1,0,0,0,7,10263,424,10 pounds,I do not know.
+gate,policy,cf22b7bf,knowledge-update,5,2,1,1,1,1,8,1,1,1,0,7,10277,485,10 pounds,You have lost 10 pounds.
+none,baseline,c6853660,knowledge-update,5,2,0,0,,,,,0,0,0,2,234,19,You increased the limit (from one cup to two cups),I do not know.
+context,baseline,c6853660,knowledge-update,5,2,1,0,,,,,0,0,0,2,10195,20,You increased the limit (from one cup to two cups),increase
+append,policy,c6853660,knowledge-update,5,2,0,0,0,0,14,0,0,0,0,7,12376,704,You increased the limit (from one cup to two cups),"You have cut back to just one cup of coffee in the morning, which is a decrease."
+auto,policy,c6853660,knowledge-update,5,2,1,0,0,0,12,2,0,0,0,7,12344,736,You increased the limit (from one cup to two cups),increase
+gate,policy,c6853660,knowledge-update,5,2,0,0,0,0,14,2,2,2,0,7,12314,806,You increased the limit (from one cup to two cups),I do not know.
+none,baseline,89941a93,knowledge-update,5,2,0,0,,,,,0,0,0,2,200,23,4,I do not know.
+context,baseline,89941a93,knowledge-update,5,2,1,1,,,,,0,0,0,2,10676,16,4,4
+append,policy,89941a93,knowledge-update,5,2,1,0,0,0,15,0,0,0,0,7,12956,770,4,Four
+auto,policy,89941a93,knowledge-update,5,2,1,0,1,0,13,1,0,0,0,7,13123,737,4,You own four bikes.
+gate,policy,89941a93,knowledge-update,5,2,1,0,0,0,12,1,1,1,0,7,13056,714,4,Four
+none,baseline,69fee5aa,knowledge-update,5,2,0,0,,,,,0,0,0,2,219,19,38,I do not know.
+context,baseline,69fee5aa,knowledge-update,5,2,0,0,,,,,0,0,0,2,8014,21,38,37
+append,policy,69fee5aa,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,10343,470,38,37
+auto,policy,69fee5aa,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,10343,466,38,37
+gate,policy,69fee5aa,knowledge-update,5,2,0,0,0,0,9,0,1,1,0,7,10343,528,38,37
+none,baseline,e61a7584,knowledge-update,5,2,0,0,,,,,0,0,0,2,205,19,9 months,I do not know.
+context,baseline,e61a7584,knowledge-update,5,2,1,1,,,,,0,0,0,2,9038,23,9 months,about 9 months
+append,policy,e61a7584,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,11030,449,9 months,You have had your cat Luna for about 6 months as of August 2023.
+auto,policy,e61a7584,knowledge-update,5,2,0,0,0,0,3,0,0,0,0,7,10858,292,9 months,You have had your cat Luna for about 6 months as of August 2023.
+gate,policy,e61a7584,knowledge-update,5,2,0,0,0,0,7,0,1,1,0,7,11026,440,9 months,About 6 months as of August 2023.
+none,baseline,f9e8c073,knowledge-update,5,2,0,0,,,,,0,0,0,2,207,23,five,I do not know.
+context,baseline,f9e8c073,knowledge-update,5,2,1,1,,,,,0,0,0,2,7317,17,five,five sessions
+append,policy,f9e8c073,knowledge-update,5,2,0,0,1,1,11,0,0,0,0,7,9252,600,five,I do not know.
+auto,policy,f9e8c073,knowledge-update,5,2,1,1,1,1,11,1,0,0,0,7,9196,611,five,five
+gate,policy,f9e8c073,knowledge-update,5,2,1,1,1,1,9,1,1,1,0,7,9195,547,five,five
+none,baseline,eace081b,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,19,Oahu,I do not know.
+context,baseline,eace081b,knowledge-update,5,2,1,1,,,,,0,0,0,2,9871,17,Oahu,Oahu
+append,policy,eace081b,knowledge-update,5,2,0,0,1,1,5,0,0,0,0,7,11711,304,Oahu,I do not know.
+auto,policy,eace081b,knowledge-update,5,2,0,0,1,1,3,1,0,0,0,7,11647,263,Oahu,I do not know.
+gate,policy,eace081b,knowledge-update,5,2,0,0,1,1,5,1,1,1,0,7,11699,372,Oahu,I do not know.
+none,baseline,0ddfec37,knowledge-update,5,2,0,0,,,,,0,0,0,2,225,19,15,I do not know.
+context,baseline,0ddfec37,knowledge-update,5,2,1,1,,,,,0,0,0,2,10081,17,15,15
+append,policy,0ddfec37,knowledge-update,5,2,1,1,1,1,18,0,0,0,0,7,12350,925,15,15
+auto,policy,0ddfec37,knowledge-update,5,2,0,0,1,0,12,1,0,0,0,7,12147,670,15,I do not know.
+gate,policy,0ddfec37,knowledge-update,5,2,0,0,1,0,22,1,1,1,0,7,12344,1128,15,I do not know.
+none,baseline,06db6396,knowledge-update,5,2,0,0,,,,,0,0,0,2,206,19,5,I do not know.
+context,baseline,06db6396,knowledge-update,5,2,1,1,,,,,0,0,0,2,8478,20,5,5
+append,policy,06db6396,knowledge-update,5,2,0,0,1,0,7,0,0,0,0,7,10547,448,5,4
+auto,policy,06db6396,knowledge-update,5,2,0,0,1,0,7,0,0,0,0,7,10571,461,5,4
+gate,policy,06db6396,knowledge-update,5,2,1,1,1,1,5,1,1,1,0,7,10401,392,5,You have completed 5 painting projects.
+none,baseline,9bbe84a2,knowledge-update,5,2,0,0,,,,,0,0,0,2,219,19,level 100,I do not know.
+context,baseline,9bbe84a2,knowledge-update,5,2,1,1,,,,,0,0,0,2,9545,24,level 100,Level 100
+append,policy,9bbe84a2,knowledge-update,5,2,1,1,1,1,10,0,0,0,0,7,11627,550,level 100,To reach level 100 before the end of the year 2023.
+auto,policy,9bbe84a2,knowledge-update,5,2,0,0,0,0,8,1,0,0,0,7,11461,495,level 100,I do not know.
+gate,policy,9bbe84a2,knowledge-update,5,2,0,0,0,0,7,1,1,1,0,7,11468,458,level 100,I do not know.
+none,baseline,3ba21379,knowledge-update,5,2,0,0,,,,,0,0,0,2,212,23,Ford F-150 pickup truck,I do not know.
+context,baseline,3ba21379,knowledge-update,5,2,1,1,,,,,0,0,0,2,10470,22,Ford F-150 pickup truck,Ford F-150 pickup truck
+append,policy,3ba21379,knowledge-update,5,2,0,1,1,1,3,0,0,0,0,7,12283,227,Ford F-150 pickup truck,Ford F-150 pickup truck and Ford Mustang Shelby GT350R
+auto,policy,3ba21379,knowledge-update,5,2,1,1,1,1,2,1,0,0,0,7,12192,214,Ford F-150 pickup truck,Ford F-150 pickup truck
+gate,policy,3ba21379,knowledge-update,5,2,1,1,1,1,3,1,1,1,0,7,12285,263,Ford F-150 pickup truck,Ford F-150 pickup truck
+none,baseline,ba61f0b9,knowledge-update,5,2,0,0,,,,,0,0,0,2,212,19,6,I do not know.
+context,baseline,ba61f0b9,knowledge-update,5,2,1,1,,,,,0,0,0,2,10352,17,6,6 women
+append,policy,ba61f0b9,knowledge-update,5,2,1,1,1,1,8,0,0,0,0,7,12307,407,6,6
+auto,policy,ba61f0b9,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,12261,343,6,I do not know.
+gate,policy,ba61f0b9,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,12259,343,6,I do not know.
+none,baseline,5a4f22c0,knowledge-update,5,2,0,0,,,,,0,0,0,2,218,19,TechCorp,I do not know.
+context,baseline,5a4f22c0,knowledge-update,5,2,1,1,,,,,0,0,0,2,10101,21,TechCorp,TechCorp
+append,policy,5a4f22c0,knowledge-update,5,2,1,1,1,1,12,0,0,0,0,7,12076,586,TechCorp,TechCorp
+auto,policy,5a4f22c0,knowledge-update,5,2,1,1,1,1,12,0,0,0,0,7,12064,581,TechCorp,TechCorp
+gate,policy,5a4f22c0,knowledge-update,5,2,1,1,1,1,14,1,1,1,0,7,12277,758,TechCorp,TechCorp
+none,baseline,c7dc5443,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,19,5-2,I do not know.
+context,baseline,c7dc5443,knowledge-update,5,2,1,1,,,,,0,0,0,2,10543,22,5-2,5-2
+append,policy,c7dc5443,knowledge-update,5,2,0,0,0,0,14,0,0,0,0,7,12856,702,5-2,3-2
+auto,policy,c7dc5443,knowledge-update,5,2,1,1,1,1,19,1,0,0,0,7,12950,1004,5-2,5-2
+gate,policy,c7dc5443,knowledge-update,5,2,1,1,1,1,16,1,1,1,0,7,12876,844,5-2,5-2
+none,baseline,07741c44,knowledge-update,5,2,0,0,,,,,0,0,0,2,203,19,under my bed,I do not know.
+context,baseline,07741c44,knowledge-update,5,2,1,1,,,,,0,0,0,2,10582,17,under my bed,under my bed
+append,policy,07741c44,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,12795,541,under my bed,I do not know.
+auto,policy,07741c44,knowledge-update,5,2,0,0,0,0,7,1,0,0,0,7,12746,436,under my bed,I do not know.
+gate,policy,07741c44,knowledge-update,5,2,0,0,0,0,8,1,2,2,0,7,12829,587,under my bed,In a shoe rack in your closet
+none,baseline,7a87bd0c,knowledge-update,5,2,0,0,,,,,0,0,0,2,211,19,4 weeks,I do not know.
+context,baseline,7a87bd0c,knowledge-update,5,2,1,1,,,,,0,0,0,2,10751,17,4 weeks,4 weeks
+append,policy,7a87bd0c,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,13190,503,4 weeks,3 weeks as of June 2023
+auto,policy,7a87bd0c,knowledge-update,5,2,1,1,1,1,14,0,0,0,0,7,13309,741,4 weeks,4 weeks
+gate,policy,7a87bd0c,knowledge-update,5,2,0,0,0,0,12,1,1,1,0,7,13186,728,4 weeks,3 weeks as of June 2023
+none,baseline,5c40ec5b,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,15,We've met up twice.,I do not know.
+context,baseline,5c40ec5b,knowledge-update,5,2,1,0,,,,,0,0,0,2,8094,20,We've met up twice.,twice
+append,policy,5c40ec5b,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,10094,479,We've met up twice.,I do not know.
+auto,policy,5c40ec5b,knowledge-update,5,2,1,0,0,0,8,2,0,0,0,7,10112,534,We've met up twice.,Twice
+gate,policy,5c40ec5b,knowledge-update,5,2,1,0,0,0,8,2,2,2,0,7,10072,540,We've met up twice.,Twice
+none,baseline,59524333,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,23,6:00 pm,I do not know.
+context,baseline,59524333,knowledge-update,5,2,0,0,,,,,0,0,0,2,11102,39,6:00 pm,"You usually go to the gym at 7:00 pm on Mondays, Wednesdays, and Fridays."
+append,policy,59524333,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,13363,705,6:00 pm,"You usually go to the gym at 7:00 pm on Mondays, Wednesdays, and Fridays."
+auto,policy,59524333,knowledge-update,5,2,1,1,1,1,11,0,0,0,0,7,13160,653,6:00 pm,6:00 pm
+gate,policy,59524333,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,13291,610,6:00 pm,7:00 pm
+none,baseline,26bdc477,knowledge-update,5,2,0,0,,,,,0,0,0,2,215,19,five,I do not know.
+context,baseline,26bdc477,knowledge-update,5,2,1,1,,,,,0,0,0,2,11983,21,five,Five trips
+append,policy,26bdc477,knowledge-update,5,2,0,0,0,0,17,0,0,0,0,7,14235,856,five,Three trips
+auto,policy,26bdc477,knowledge-update,5,2,0,0,0,0,14,0,0,0,0,7,14169,702,five,3
+gate,policy,26bdc477,knowledge-update,5,2,0,0,0,0,14,0,0,0,0,7,14191,738,five,3
+none,baseline,10e09553,knowledge-update,5,2,0,0,,,,,0,0,0,2,240,19,7,I do not know.
+context,baseline,10e09553,knowledge-update,5,2,1,1,,,,,0,0,0,2,11592,20,7,7
+append,policy,10e09553,knowledge-update,5,2,1,1,1,1,16,0,0,0,0,7,13939,851,7,7
+auto,policy,10e09553,knowledge-update,5,2,1,1,1,1,18,0,0,0,0,7,14111,946,7,You caught 7 largemouth bass with Alex on the earlier fishing trip to Lake Michigan on 2023-07-10.
+gate,policy,10e09553,knowledge-update,5,2,1,1,1,1,15,0,0,0,0,7,13995,841,7,7
+none,baseline,9ea5eabc,knowledge-update,5,2,0,0,,,,,0,0,0,2,205,19,Paris,I do not know.
+context,baseline,9ea5eabc,knowledge-update,5,2,1,1,,,,,0,0,0,2,10238,20,Paris,Paris
+append,policy,9ea5eabc,knowledge-update,5,2,1,1,1,1,11,0,0,0,0,7,12186,567,Paris,Paris
+auto,policy,9ea5eabc,knowledge-update,5,2,1,1,1,1,12,0,0,0,0,7,12159,596,Paris,Paris
+gate,policy,9ea5eabc,knowledge-update,5,2,1,1,1,1,13,0,0,0,0,7,12129,633,Paris,Paris
+none,baseline,2133c1b5,knowledge-update,5,2,0,0,,,,,0,0,0,2,215,19,3 months,I do not know.
+context,baseline,2133c1b5,knowledge-update,5,2,1,1,,,,,0,0,0,2,10153,21,3 months,3 months
+append,policy,2133c1b5,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,12105,660,3 months,Since around March 2023.
+auto,policy,2133c1b5,knowledge-update,5,2,0,0,0,0,8,1,0,0,0,7,12028,449,3 months,I do not know.
+gate,policy,2133c1b5,knowledge-update,5,2,0,0,0,0,10,0,1,1,0,7,12074,550,3 months,Since around March 2023.
+none,baseline,50635ada,knowledge-update,5,2,0,0,,,,,0,0,0,2,218,15,Premier Silver,I do not know.
+context,baseline,50635ada,knowledge-update,5,2,1,1,,,,,0,0,0,2,12083,21,Premier Silver,Premier Silver
+append,policy,50635ada,knowledge-update,5,2,1,1,1,1,16,0,0,0,0,7,14397,792,Premier Silver,Premier Silver
+auto,policy,50635ada,knowledge-update,5,2,0,0,0,0,12,1,0,0,0,7,14468,704,Premier Silver,I do not know.
+gate,policy,50635ada,knowledge-update,5,2,0,0,0,0,15,1,1,1,0,7,14387,779,Premier Silver,I do not know.
+none,baseline,01493427,knowledge-update,5,2,0,0,,,,,0,0,0,2,217,19,25,I do not know.
+context,baseline,01493427,knowledge-update,5,2,1,1,,,,,0,0,0,2,10079,31,25,You have added 25 new postcards to your collection since you started collecting again.
+append,policy,01493427,knowledge-update,5,2,0,0,0,0,6,0,0,0,0,7,11900,319,25,I do not know.
+auto,policy,01493427,knowledge-update,5,2,0,0,0,0,6,0,0,0,0,7,11884,316,25,I do not know.
+gate,policy,01493427,knowledge-update,5,2,0,0,0,0,6,0,0,0,0,7,11898,323,25,I do not know.
+none,baseline,f685340e,knowledge-update,5,2,0,0,,,,,0,0,0,2,256,23,"Previously, you play tennis with your friends at the local park every week (on Sunday). Currently, you play tennis every other week (on Sunday).",I do not know.
+context,baseline,f685340e,knowledge-update,5,2,1,0,,,,,0,0,0,2,9456,40,"Previously, you play tennis with your friends at the local park every week (on Sunday). Currently, you play tennis every other week (on Sunday).","You previously played tennis with your friends at the local park every week, and you currently play every other week."
+append,policy,f685340e,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,11803,579,"Previously, you play tennis with your friends at the local park every week (on Sunday). Currently, you play tennis every other week (on Sunday).","I do not know how often you played previously, but you currently have weekly tennis sessions with friends."
+auto,policy,f685340e,knowledge-update,5,2,0,0,0,0,14,0,0,0,0,7,11951,691,"Previously, you play tennis with your friends at the local park every week (on Sunday). Currently, you play tennis every other week (on Sunday).","I do not know how often you played previously, but you currently have weekly tennis sessions with friends."
+gate,policy,f685340e,knowledge-update,5,2,0,0,0,0,13,0,0,0,0,7,11866,628,"Previously, you play tennis with your friends at the local park every week (on Sunday). Currently, you play tennis every other week (on Sunday).",You play tennis weekly with friends.
+none,baseline,08e075c7,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,19,9 months,I do not know.
+context,baseline,08e075c7,knowledge-update,5,2,1,1,,,,,0,0,0,2,9672,32,9 months,You have been using your Fitbit Charge 3 for 9 months.
+append,policy,08e075c7,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,11742,562,9 months,6 months as of June 2023
+auto,policy,08e075c7,knowledge-update,5,2,0,0,0,0,8,0,0,0,0,7,11773,527,9 months,You have been using your Fitbit Charge 3 for 6 months as of June 2023.
+gate,policy,08e075c7,knowledge-update,5,2,0,0,0,0,7,0,1,1,0,7,11677,481,9 months,6 months as of June 2023
+none,baseline,71315a70,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,23,10-12 hours,I do not know.
+context,baseline,71315a70,knowledge-update,5,2,1,1,,,,,0,0,0,2,9109,21,10-12 hours,10-12 hours
+append,policy,71315a70,knowledge-update,5,2,0,0,0,0,5,0,0,0,0,7,11027,285,10-12 hours,I do not know.
+auto,policy,71315a70,knowledge-update,5,2,0,0,0,0,6,0,0,0,0,7,11123,398,10-12 hours,Around 5 to 6 hours.
+gate,policy,71315a70,knowledge-update,5,2,0,0,0,0,5,0,0,0,0,7,10928,282,10-12 hours,I do not know.
+none,baseline,89941a94,knowledge-update,5,2,0,0,,,,,0,0,0,2,238,19,Yes. (You have a road bike too.),I do not know.
+context,baseline,89941a94,knowledge-update,5,2,1,0,,,,,0,0,0,2,9330,25,Yes. (You have a road bike too.),You have a road bike and a new hybrid bike.
+append,policy,89941a94,knowledge-update,5,2,1,0,0,0,11,0,0,0,0,7,11329,602,Yes. (You have a road bike too.),"Yes, you own a road bike."
+auto,policy,89941a94,knowledge-update,5,2,1,0,0,0,12,1,0,0,0,7,11478,710,Yes. (You have a road bike too.),"Yes, you own a road bike and a new hybrid bike in addition to your mountain bike and your commuter bike."
+gate,policy,89941a94,knowledge-update,5,2,1,0,0,0,9,1,1,1,0,7,11286,584,Yes. (You have a road bike too.),"Yes, you own a road bike and a new hybrid bike in addition to your mountain bike and your commuter bike."
+none,baseline,dfde3500,knowledge-update,5,2,0,0,,,,,0,0,0,2,215,19,Wednesday,I do not know.
+context,baseline,dfde3500,knowledge-update,5,2,1,1,,,,,0,0,0,2,9400,20,Wednesday,Wednesday
+append,policy,dfde3500,knowledge-update,5,2,1,1,1,1,7,0,0,0,0,7,11427,389,Wednesday,Wednesday
+auto,policy,dfde3500,knowledge-update,5,2,0,0,0,0,6,1,0,0,0,7,11361,396,Wednesday,I do not know.
+gate,policy,dfde3500,knowledge-update,5,2,0,0,1,1,6,1,1,1,0,7,11470,413,Wednesday,I do not know.
+none,baseline,e493bb7c,knowledge-update,5,2,0,0,,,,,0,0,0,2,217,19,in my bedroom,I do not know.
+context,baseline,e493bb7c,knowledge-update,5,2,1,0,,,,,0,0,0,2,11187,25,in my bedroom,Above your bed in your bedroom
+append,policy,e493bb7c,knowledge-update,5,2,0,0,0,0,13,0,0,0,0,7,13606,675,in my bedroom,Above their bed
+auto,policy,e493bb7c,knowledge-update,5,2,0,0,0,0,14,1,0,0,0,7,13684,850,in my bedroom,Above their bed
+gate,policy,e493bb7c,knowledge-update,5,2,1,0,0,0,13,1,1,1,0,7,13540,728,in my bedroom,Above their bed
+none,baseline,22d2cb42,knowledge-update,5,2,0,0,,,,,0,0,0,2,205,23,The music shop on Main St.,I do not know.
+context,baseline,22d2cb42,knowledge-update,5,2,0,0,,,,,0,0,0,2,8428,18,The music shop on Main St.,Rhythm Central
+append,policy,22d2cb42,knowledge-update,5,2,1,0,0,0,10,0,0,0,0,7,10797,518,The music shop on Main St.,Rhythm Central on Main St
+auto,policy,22d2cb42,knowledge-update,5,2,1,0,0,0,10,1,0,0,0,7,10824,583,The music shop on Main St.,A music shop on Main St
+gate,policy,22d2cb42,knowledge-update,5,2,1,0,0,0,9,1,1,1,0,7,10695,509,The music shop on Main St.,A music shop on Main St
+none,baseline,2698e78f,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,15,every week,I do not know.
+context,baseline,2698e78f,knowledge-update,5,2,1,1,,,,,0,0,0,2,8355,17,every week,Every week
+append,policy,2698e78f,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,10539,509,every week,Every two weeks
+auto,policy,2698e78f,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,10437,418,every week,Every two weeks
+gate,policy,2698e78f,knowledge-update,5,2,0,0,0,0,9,0,1,1,0,7,10501,508,every week,Every two weeks.
+none,baseline,a2f3aa27,knowledge-update,5,2,0,0,,,,,0,0,0,2,207,23,1300,I do not know.
+context,baseline,a2f3aa27,knowledge-update,5,2,1,1,,,,,0,0,0,2,11024,19,1300,1300
+append,policy,a2f3aa27,knowledge-update,5,2,0,0,1,1,11,0,0,0,0,7,12991,625,1300,I do not know.
+auto,policy,a2f3aa27,knowledge-update,5,2,1,1,1,1,15,1,0,0,0,7,13197,836,1300,You have about 1300 followers on Instagram.
+gate,policy,a2f3aa27,knowledge-update,5,2,1,1,1,1,9,1,1,1,0,7,13076,554,1300,Close to 1300 followers as of May 2023.
+none,baseline,d7c942c3,knowledge-update,5,2,0,0,,,,,0,0,0,2,208,19,Yes.,I do not know.
+context,baseline,d7c942c3,knowledge-update,5,2,0,0,,,,,0,0,0,2,8888,20,Yes.,No
+append,policy,d7c942c3,knowledge-update,5,2,1,1,0,0,3,0,0,0,0,7,10627,205,Yes.,"Yes, you use the same grocery list app."
+auto,policy,d7c942c3,knowledge-update,5,2,1,1,0,0,4,0,0,0,0,7,10741,260,Yes.,"Yes, your mom uses the same grocery list app as you."
+gate,policy,d7c942c3,knowledge-update,5,2,1,1,0,0,3,0,0,0,0,7,10630,212,Yes.,"Yes, you use the same grocery list app as your mom."
+none,baseline,4d6b87c8,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,19,25,I do not know.
+context,baseline,4d6b87c8,knowledge-update,5,2,1,1,,,,,0,0,0,2,8807,21,25,25
+append,policy,4d6b87c8,knowledge-update,5,2,0,0,0,0,5,0,0,0,0,7,10880,377,25,20
+auto,policy,4d6b87c8,knowledge-update,5,2,1,1,1,1,4,1,0,0,0,7,10669,304,25,25
+gate,policy,4d6b87c8,knowledge-update,5,2,1,1,1,1,9,1,1,1,0,7,11048,537,25,25 titles
+none,baseline,42ec0761,knowledge-update,5,2,0,0,,,,,0,0,0,2,207,19,Yes,I do not know.
+context,baseline,42ec0761,knowledge-update,5,2,1,1,,,,,0,0,0,2,11408,36,Yes,"Yes, you have a spare screwdriver that you picked up when you organized your computer desk."
+append,policy,42ec0761,knowledge-update,5,2,1,1,0,0,13,0,0,0,0,7,13483,642,Yes,"Yes, you have a spare screwdriver for maintenance."
+auto,policy,42ec0761,knowledge-update,5,2,0,0,0,0,8,1,0,0,0,7,13384,475,Yes,I do not know.
+gate,policy,42ec0761,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,13494,542,Yes,I do not know.
+none,baseline,6a27ffc2,knowledge-update,5,2,0,0,,,,,0,0,0,2,221,23,30,I do not know.
+context,baseline,6a27ffc2,knowledge-update,5,2,1,1,,,,,0,0,0,2,9569,17,30,30
+append,policy,6a27ffc2,knowledge-update,5,2,1,1,1,1,18,0,0,0,0,7,11832,771,30,30
+auto,policy,6a27ffc2,knowledge-update,5,2,0,0,0,0,10,0,0,0,0,7,11795,522,30,I do not know.
+gate,policy,6a27ffc2,knowledge-update,5,2,0,0,0,0,18,0,1,1,0,7,11842,846,30,You have completed 20 videos.
+none,baseline,0e4e4c46,knowledge-update,5,2,0,0,,,,,0,0,0,2,209,19,132 points,I do not know.
+context,baseline,0e4e4c46,knowledge-update,5,2,1,1,,,,,0,0,0,2,10783,19,132 points,132 points
+append,policy,0e4e4c46,knowledge-update,5,2,0,0,0,0,8,0,0,0,0,7,12820,490,132 points,124 points
+auto,policy,0e4e4c46,knowledge-update,5,2,1,1,1,1,11,0,0,0,0,7,12834,569,132 points,132 points
+gate,policy,0e4e4c46,knowledge-update,5,2,1,1,1,1,11,0,0,0,0,7,12851,572,132 points,132 points
+none,baseline,8fb83627,knowledge-update,5,2,0,0,,,,,0,0,0,2,205,19,Five,I do not know.
+context,baseline,8fb83627,knowledge-update,5,2,1,1,,,,,0,0,0,2,9945,16,Five,five
+append,policy,8fb83627,knowledge-update,5,2,0,0,0,0,13,0,0,0,0,7,12181,673,Five,I do not know.
+auto,policy,8fb83627,knowledge-update,5,2,1,1,1,1,12,1,0,0,0,7,12158,665,Five,Five issues
+gate,policy,8fb83627,knowledge-update,5,2,1,1,1,1,12,1,1,1,0,7,12149,674,Five,five issues
+none,baseline,ce6d2d27,knowledge-update,5,2,0,0,,,,,0,0,0,2,211,19,Friday,I do not know.
+context,baseline,ce6d2d27,knowledge-update,5,2,0,0,,,,,0,0,0,2,8601,20,Friday,Thursday
+append,policy,ce6d2d27,knowledge-update,5,2,1,1,1,1,10,0,0,0,0,7,10750,513,Friday,Fridays
+auto,policy,ce6d2d27,knowledge-update,5,2,1,1,1,1,10,0,0,0,0,7,10685,577,Friday,Fridays
+gate,policy,ce6d2d27,knowledge-update,5,2,0,0,1,1,11,0,0,0,0,7,10999,591,Friday,Thursday
+none,baseline,1cea1afa,knowledge-update,5,2,0,0,,,,,0,0,0,2,204,23,600,I do not know.
+context,baseline,1cea1afa,knowledge-update,5,2,1,1,,,,,0,0,0,2,10076,22,600,600
+append,policy,1cea1afa,knowledge-update,5,2,1,1,1,1,11,0,0,0,0,7,12324,597,600,You have reached 600 followers on Instagram as of May 2023.
+auto,policy,1cea1afa,knowledge-update,5,2,0,0,1,1,9,0,0,0,0,7,12075,479,600,You do not know.
+gate,policy,1cea1afa,knowledge-update,5,2,1,1,1,1,9,0,0,0,0,7,12082,483,600,You have 600 followers on Instagram.
+none,baseline,affe2881,knowledge-update,5,2,0,0,,,,,0,0,0,2,213,19,32,I do not know.
+context,baseline,affe2881,knowledge-update,5,2,1,1,,,,,0,0,0,2,8317,21,32,32
+append,policy,affe2881,knowledge-update,5,2,1,1,1,1,9,0,0,0,0,7,10235,450,32,32
+auto,policy,affe2881,knowledge-update,5,2,1,1,1,1,8,1,0,0,0,7,10197,461,32,32
+gate,policy,affe2881,knowledge-update,5,2,1,1,1,1,7,1,1,1,0,7,10165,427,32,32
+none,baseline,6071bd76,knowledge-update,5,2,0,0,,,,,0,0,0,2,250,19,You switched to less water (5 ounces) per tablespoon of coffee.,I do not know.
+context,baseline,6071bd76,knowledge-update,5,2,1,0,,,,,0,0,0,2,7829,52,You switched to less water (5 ounces) per tablespoon of coffee.,"You switched to less water per tablespoon of coffee, going from 1 tablespoon for every 6 ounces of water to 1 tablespoon for every 5 ounces of water."
+append,policy,6071bd76,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,10179,587,You switched to less water (5 ounces) per tablespoon of coffee.,I do not know.
+auto,policy,6071bd76,knowledge-update,5,2,0,0,0,0,8,1,0,0,0,7,10141,526,You switched to less water (5 ounces) per tablespoon of coffee.,I do not know.
+gate,policy,6071bd76,knowledge-update,5,2,0,0,0,0,8,1,1,1,0,7,10212,552,You switched to less water (5 ounces) per tablespoon of coffee.,I do not know.
+none,baseline,603deb26,knowledge-update,5,2,0,0,,,,,0,0,0,2,231,15,10,I do not know.
+context,baseline,603deb26,knowledge-update,5,2,1,1,,,,,0,0,0,2,10170,18,10,10 times
+append,policy,603deb26,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,12222,575,10,I do not know.
+auto,policy,603deb26,knowledge-update,5,2,0,0,0,0,9,0,0,0,0,7,12253,469,10,I do not know.
+gate,policy,603deb26,knowledge-update,5,2,0,0,1,0,10,0,0,0,0,7,12317,523,10,I do not know.
+none,baseline,618f13b2,knowledge-update,5,2,0,0,,,,,0,0,0,2,215,19,six,I do not know.
+context,baseline,618f13b2,knowledge-update,5,2,0,0,,,,,0,0,0,2,10127,17,six,Four times
+append,policy,618f13b2,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,12372,576,six,I do not know.
+auto,policy,618f13b2,knowledge-update,5,2,0,0,0,0,12,1,0,0,0,7,12422,641,six,I do not know.
+gate,policy,618f13b2,knowledge-update,5,2,0,0,0,0,11,0,0,0,0,7,12359,523,six,I do not know.
+none,baseline,184da446,knowledge-update,5,2,0,0,,,,,0,0,0,2,222,19,220,I do not know.
+context,baseline,184da446,knowledge-update,5,2,1,1,,,,,0,0,0,2,11905,22,220,220
+append,policy,184da446,knowledge-update,5,2,0,0,0,0,12,0,0,0,0,7,14034,580,220,I do not know.
+auto,policy,184da446,knowledge-update,5,2,1,1,1,1,10,1,0,0,0,7,14143,615,220,220
+gate,policy,184da446,knowledge-update,5,2,1,1,1,1,10,1,1,1,0,7,14121,587,220,220
+none,baseline,7e974930,knowledge-update,5,2,0,0,,,,,0,0,0,2,218,23,$420,I do not know.
+context,baseline,7e974930,knowledge-update,5,2,1,1,,,,,0,0,0,2,9250,22,$420,$420
+append,policy,7e974930,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,11107,342,$420,I do not know.
+auto,policy,7e974930,knowledge-update,5,2,0,0,0,0,8,0,0,0,0,7,11135,390,$420,I do not know.
+gate,policy,7e974930,knowledge-update,5,2,0,0,0,0,7,0,0,0,0,7,11024,346,$420,I do not know.

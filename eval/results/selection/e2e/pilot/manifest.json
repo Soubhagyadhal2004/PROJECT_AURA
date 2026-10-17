@@ -46,6 +46,53 @@
       "modelCalls": 450,
       "promptTokens": 359076,
       "outputTokens": 18314
+    },
+    {
+      "startedAt": "2026-10-16T20:34:38.915Z",
+      "dry": false,
+      "model": "gemini-3.5-flash-lite",
+      "temperature": 0.1,
+      "node": "v24.18.0",
+      "platform": "win32-x64",
+      "serverMemorySha256": "20a1f706a233512ab95b0c51263e2d1434a1d91a0d498be25e3c5e4537cc873b",
+      "serverGeminiSha256": "b71a119e92f95c401b563090039e372e533b329e0d6777193128c1c0a7a4bacc",
+      "args": [
+        "--rpm",
+        "14"
+      ],
+      "personas": 8,
+      "start": 0,
+      "N": 100,
+      "conditions": [
+        "default",
+        "adaptive",
+        "nomin_k24",
+        "oracle_target"
+      ],
+      "policies": [
+        "gate"
+      ],
+      "config": {
+        "storeSize": 100,
+        "conditions": [
+          "default",
+          "adaptive",
+          "nomin_k24",
+          "oracle_target"
+        ],
+        "policies": [
+          "gate"
+        ],
+        "noopTurns": 4,
+        "newFactTurns": 2,
+        "personas": 8,
+        "reviewer": "oracle: accepts a proposal only if it targets the current row of the slot being changed, with the right action, and (for updates) mentions the new value; rejects everything else",
+        "notes": "oracle_target = default candidates plus the true target row when it is missing (diagnostic upper bound, not a method)"
+      },
+      "finishedAt": "2026-10-16T20:46:00.816Z",
+      "modelCalls": 20,
+      "promptTokens": 17337,
+      "outputTokens": 703
     }
   ]
 }

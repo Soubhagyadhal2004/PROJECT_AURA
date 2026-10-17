@@ -289,8 +289,8 @@ macro("agrBaseN", ag_b[0]); macro("agrBaseK", ag_b[3]); macro("agrBaseRate", ag_
 macro("agrBothN", ag_o[0]); macro("agrBothK", ag_o[3]); macro("agrBothRate", ag_o[2]); macro("agrBothHit", ag_o[1])
 
 # ---------------------------------------------------------------- LongMemEval
-lb = read_jsonl(os.path.join(R, "lme", "baseline", "runs.jsonl"))
-lo = read_jsonl(os.path.join(R, "lme", "both", "runs.jsonl"))
+lb = read_jsonl(os.path.join(R, "lme78", "baseline", "runs.jsonl"))
+lo = read_jsonl(os.path.join(R, "lme78", "both", "runs.jsonl"))
 SYS = [("none", "no memory"), ("context", "full context"), ("append", "append-only"), ("auto", "auto-apply"), ("gate", "gate (oracle reviewer)")]
 body = "\\begin{tabular}{lccccc}\n\\toprule\nsystem & baseline & F1+F2 & difference & $b/c$ & $p$ \\\\\n\\midrule\n"
 nq = len({r["qid"] for r in lb})
@@ -313,6 +313,7 @@ cm = {r["qid"]: r for r in lo if r["policy"] == "context"}
 gm = {r["qid"]: r for r in lo if r["policy"] == "gate"}
 b = sum(1 for q in cm if cm[q]["judged"] and not gm[q]["judged"]); c = sum(1 for q in cm if not cm[q]["judged"] and gm[q]["judged"])
 macro("lmeCtxGateP", pf(sign_p(b, c))); macro("lmeCtxGateB", str(b)); macro("lmeCtxGateC", str(c))
+macro("lmeAnswerInMem", f3(mean(1 if r["goldInActive"] else 0 for r in lo if r["policy"] == "gate")))
 macro("lmeGateMemPrompts", f"{mean(r['prompts'] for r in lo if r['policy'] == 'gate'):.1f}")
 
 # ---- counts straight from the real runs
