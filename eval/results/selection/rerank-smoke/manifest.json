@@ -1,0 +1,16 @@
+{
+  "reranker": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "pool": 50,
+  "k": 24,
+  "N": 350,
+  "chunks": [
+    {
+      "start": 0,
+      "count": 1,
+      "startedAt": "2026-10-16T17:20:13.954Z",
+      "node": "v24.18.0",
+      "platform": "win32-x64",
+      "finishedAt": "2026-10-16T17:20:51.604Z"
+    }
+  ]
+}
