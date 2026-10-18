@@ -187,6 +187,28 @@ CREATE TRIGGER IF NOT EXISTS nudges_memory_deleted BEFORE DELETE ON memories BEG
 END;
 `);
 
+// ambient mode (server/ambient.mjs): one row per utterance heard, with the need score, its trend and the decision
+db.exec(`
+CREATE TABLE IF NOT EXISTS ambient_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
+  message_id INTEGER,
+  at INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  addressed INTEGER NOT NULL DEFAULT 0,  -- said to AURA (by name, or a reply right after it spoke)
+  need REAL,                             -- raw need score of this utterance (0..1)
+  smoothed REAL,                         -- moving average after it
+  slope REAL,                            -- least-squares slope of the recent averages, per utterance
+  direction TEXT,                        -- rising | flat | falling | unknown
+  action TEXT NOT NULL,                  -- speak | wait | defer | suppress | answer
+  reason TEXT,
+  kind TEXT,
+  topic TEXT,
+  heuristic INTEGER NOT NULL DEFAULT 0   -- scored without Gemini (keyword estimate)
+);
+CREATE INDEX IF NOT EXISTS ambient_events_conv ON ambient_events(conversation_id, id);
+`);
+
 export const now = () => Date.now();
 
 export function f32ToBlob(arr) {

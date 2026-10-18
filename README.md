@@ -196,6 +196,43 @@ meeting is recording. Reminders that fall in quiet hours or over the daily limit
 Saying no to a reminder doesn't start the cooldown. Outcomes per
 type: `GET /api/proactive/stats`. Dates are parsed with chrono-node in your time zone.
 
+### Ambient mode (`server/ambient.mjs`)
+
+Press the ear button next to the microphone. AURA stays in the background and keeps quiet; the voice session
+stays open, but the microphone goes to a local speech segmenter instead of the voice model. Every utterance is
+transcribed on the server and stored in the conversation as an *Overheard* line (these lines are never used for
+long-term memory, since they may be other people).
+
+- **Asked directly → always answers.** Saying "Aura, …" (or "hey Aura") gets an answer at once. Common
+  mis-transcriptions also count: "hey Auditor", "hey Aurora" and the spelled-out "A U R A". Right after
+  AURA has spoken, a reply aimed at it is answered without the name. Typed messages are always answered.
+- **Otherwise it follows the trend of the need, not a single score.** Each utterance gets a need score (0–1)
+  from Gemini, judged against the recent transcript *and* what AURA knows that bears on it: matching memories,
+  the conversation's documents, past meetings on the topic and upcoming reminders. Scores are smoothed and the
+  least-squares slope over the last few utterances decides:
+  - **rising** and the smoothed level is at or over the threshold → AURA chips in, once, briefly;
+  - **rising** but under the threshold → wait (the need is building);
+  - **flat** → defer (keep listening, decide on a later turn); but if the need stays high and flat for
+    `AURA_AMBIENT_PERSIST` turns in a row (default 3), nobody is meeting it, so AURA speaks once;
+  - **falling** (including a clear downturn on the latest step) → suppress the urge to reply.
+- **What it says is woven from the context.** When AURA speaks it gets a brief with the recent transcript, the
+  facts that matched and a suggested point; it can still call `ask_document`, `find_meetings` and so on.
+- After AURA speaks, and when the topic changes, the trend restarts from a zero level, so a jump straight to a
+  high need counts as rising. After speaking there is a cooldown on the same topic; a new topic lifts it.
+- **AURA does not hear itself.** While its answer is being generated or its voice is playing, and for about a
+  second after, the browser throws away the microphone audio. As a second layer the server drops any heard line
+  that is almost all words AURA itself said in the last 90 seconds (it is logged as `echo`). Because of the first
+  layer you can't interrupt AURA by talking while it speaks in ambient mode.
+- AURA only says what it knows (memories, documents, meetings, tools). When it has nothing, it says so and offers
+  to remember it, rather than guessing.
+
+Every decision is logged in the `ambient_events` table (`GET /api/ambient/:conversationId` shows the current
+series and recent decisions, `GET /api/ambient/stats` the counts). Tuning, all optional, in `.env`:
+`AURA_AMBIENT_THRESHOLD` (0.6), `AURA_AMBIENT_WINDOW` (3), `AURA_AMBIENT_MIN_POINTS` (3), `AURA_AMBIENT_FLAT`
+(0.04), `AURA_AMBIENT_SMOOTHING` (0.6), `AURA_AMBIENT_COOLDOWN_SEC` (60), `AURA_AMBIENT_FOLLOWUP_SEC` (25),
+`AURA_AMBIENT_STALE_SEC` (180), `AURA_AMBIENT_PERSIST` (3, 0 = off). Each utterance costs one transcription and one scoring request
+(`GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TEXT_MODEL`); without a key a keyword estimate is used for the score.
+
 ## Your data
 
 All data lives in `data/` (git-ignored): `aura.db` (conversations, memories, meetings, voice
@@ -212,6 +249,56 @@ npm test -- --watchAll=false   # frontend unit tests (voice-activity segmenter)
 
 The server tests replace Gemini and the two local models with fakes, so they check AURA's own logic,
 not model quality.
+
+### Voice gate for ambient mode (`server/voicegate.mjs`)
+
+Once at least one voice profile exists, ambient mode only listens to registered voices. Every utterance's voiceprint
+is compared with the profiles (similarity at least `AURA_AMBIENT_GATE_THRESHOLD`, 0.5) *before* it is transcribed,
+so a film, a video call or AURA's own speaker is dropped and never stored or scored. Clips shorter than a second are
+too short to judge; they count only when they are said to AURA ("Aura, ...", or a reply right after it spoke).
+`AURA_AMBIENT_GATE_ONLY=<name>` accepts a single person; `AURA_AMBIENT_VOICE_GATE=off` turns the gate off. If the
+speaker model fails, audio is let through (AURA does not go deaf). Dropped clips are logged as `ignore` events.
+
+### Learning when to stay quiet (ambient feedback)
+
+The first reaction after AURA chipped in *on its own* is read as feedback: "not now", "stop", "I didn't ask" raise
+the threshold for unprompted remarks by 0.05 (AURA says nothing back); "thanks", "good point" lower it by 0.02.
+The adjustment is stored, fades after `AURA_AMBIENT_FEEDBACK_DAYS` (30) and stays between -0.1 and +0.25. The
+threshold in use is shown in the ambient meter; `GET /api/ambient/stats` reports the feedback counts.
+
+### Tasks: plan, run, approve, cancel, undo (`server/agent.mjs`)
+
+For requests that need several steps ("check my last meeting and write the minutes", "find what we decided about
+the budget and remember it"), the voice assistant calls `run_task`. The text model plans at most 6 steps using only
+AURA's own tools; the plan is checked against the tool list (unknown tools and bad references are refused before
+anything runs), and a step can use an earlier result (`$1.meetings.0.id`).
+
+| Risk | Tools | Runs |
+| --- | --- | --- |
+| read | `recall_memories`, `find_meetings`, `get_meeting`, `ask_document`, `briefing` | on its own |
+| write (reversible) | `remember`, `set_reminder`, `change_memory`, `forget_memory` | on its own (`AURA_AGENT_AUTO_WRITE=0` asks first) |
+| confirm | `write_minutes` | only after the user says yes |
+
+- Changing or deleting an existing memory never happens directly: `change_memory` / `forget_memory` and a
+  `remember` that conflicts with a known fact create a memory review that waits for your OK. Whether a new fact
+  conflicts is judged by the text model; without it, facts that start the same way and end differently
+  ("The user's father is named ...") are sent for review, anything else is saved.
+- Transient errors (429, 5xx, network) are retried twice; when a step fails or finds nothing that later steps need,
+  the planner gets one chance to re-plan; otherwise the task stops and says what went wrong.
+- Every step is logged (`agent_tasks`, `agent_steps`: arguments, result, status, attempts, why it was chosen).
+  A task card in the Assistant view shows the steps with **Yes / No**, **Stop** and **Undo changes**; by voice,
+  `approve_task`, `reject_task`, `cancel_task` and `undo_last_task`. Undo removes new memories, cancels suggested
+  reminders and withdraws pending reviews, newest first. "Delete everything" also clears the task log.
+- REST: `POST /api/agent/tasks {goal | steps, conversationId}`, `GET /api/agent/tasks[/:id]`,
+  `POST /api/agent/tasks/:id/{approve,reject,cancel,undo}`, `POST /api/agent/undo-last`, `GET /api/agent/stats`.
+
+### Time-aware recall
+
+The assistant's memory lookups (`recall_memories`, ambient context, tasks) mark facts that may be outdated: a plan
+whose explicit date (day, month and year) has passed, or a work/people/plan fact not confirmed for
+`AURA_MEMORY_STALE_DAYS` (180). AURA is told to say what it last knew and ask, not state it as current. Among equally
+close matches, the more recently confirmed fact of a changing kind ranks first. The evaluation harness (`eval/`)
+calls the plain search, which is unchanged.
 
 ## Known limitations (honest status)
 
@@ -239,6 +326,10 @@ not model quality.
 - Documents: tested with a fake Gemini; answer quality on real files is unverified. Excel dates may appear
   as serial numbers, charts and embedded images in Office files are not read, and password-protected
   files can't be opened.
+- Voice gate, ambient feedback and tasks are tested with a fake Gemini and fake speaker model (`npm run test:server`),
+  and tasks were also run with given steps on a copy of a real database. The gate threshold (0.5) has not been
+  measured on real room audio, and how well the Live model chooses `run_task` and how good real plans are is
+  unverified (the test environment could not reach the Gemini API).
 - Single local user, no accounts. The server listens on 127.0.0.1 only.
 
 ## Project layout

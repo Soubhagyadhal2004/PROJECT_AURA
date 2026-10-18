@@ -24,6 +24,7 @@ import { AudioStreamer } from "../lib/audio-streamer";
 import { AudioRecorder } from "../lib/audio-recorder";
 import { audioContext } from "../lib/utils";
 import VolMeterWorket from "../lib/worklets/vol-meter";
+import { Segmenter, SpeechSegment } from "../lib/segmenter";
 import { api, DOCUMENT_LIMIT_MB, DocumentInfo, Memory, Message, WebSource } from "../lib/api";
 
 const recallDeclaration: FunctionDeclaration = {
@@ -81,7 +82,40 @@ const askDocumentDeclaration: FunctionDeclaration = {
   },
 };
 
-const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetingDeclaration, askDocumentDeclaration];
+// multi-step tasks (server/agent.mjs): planned and run on the server, with approval for consequential steps
+const TASK_DECLARATIONS: FunctionDeclaration[] = [
+  {
+    name: "run_task",
+    description:
+      "Do a request that needs several of AURA's tools in a row (look things up across memories, meetings, documents and reminders, then act on them). The server plans and runs it. Returns status, steps and a summary to tell the user. If status is awaiting_approval, read the summary, ask the user, then call approve_task or reject_task.",
+    parameters: { type: Type.OBJECT, properties: { goal: { type: Type.STRING, description: "The user's request, complete, in one sentence." } }, required: ["goal"] },
+  },
+  {
+    name: "approve_task",
+    description: "Continue a task after the user clearly said yes to the step it is waiting on.",
+    parameters: { type: Type.OBJECT, properties: { task_id: { type: Type.INTEGER, description: "id from run_task" } }, required: ["task_id"] },
+  },
+  {
+    name: "reject_task",
+    description: "The user said no to the step a task is waiting on: nothing more of it runs.",
+    parameters: { type: Type.OBJECT, properties: { task_id: { type: Type.INTEGER, description: "id from run_task" } }, required: ["task_id"] },
+  },
+  {
+    name: "cancel_task",
+    description: "Stop a running task (the user said stop or cancel).",
+    parameters: { type: Type.OBJECT, properties: { task_id: { type: Type.INTEGER, description: "id from run_task" } }, required: ["task_id"] },
+  },
+  {
+    name: "undo_last_task",
+    description: "Undo what the last task in this conversation changed (new memories, reminders, pending reviews).",
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+];
+
+const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetingDeclaration, askDocumentDeclaration, ...TASK_DECLARATIONS];
+
+/** Tells the task panel to reload now. */
+export const TASKS_REFRESH = "aura:tasks-refresh";
 
 // reminder tools: only offered when AURA_PROACTIVE_REMINDERS=1 on the server
 const REMINDER_DECLARATIONS: FunctionDeclaration[] = [
@@ -138,6 +172,7 @@ async function runTool(name: string | undefined, args: any, ctx: ToolContext): P
         fact: r.content,
         lastConfirmed: new Date(r.updatedAt).toISOString().slice(0, 10),
         ...(r.meetingId ? { fromMeetingId: r.meetingId } : {}),
+        ...((r as any).mayBeOutdated ? { mayBeOutdated: (r as any).why || true } : {}),
       })),
     };
   }
@@ -180,8 +215,59 @@ async function runTool(name: string | undefined, args: any, ctx: ToolContext): P
   if (name === "get_meeting") {
     return api.get<Record<string, unknown>>(`/api/meetings/${Number(args?.meeting_id)}/brief`);
   }
+  if (name === "run_task" || name === "approve_task" || name === "reject_task" || name === "cancel_task" || name === "undo_last_task") {
+    const tid = Number(args?.task_id);
+    const r =
+      name === "run_task"
+        ? await api.post<Record<string, unknown>>("/api/agent/tasks", { goal: String(args?.goal || ""), conversationId: ctx.conversationId })
+        : name === "undo_last_task"
+          ? await api.post<Record<string, unknown>>("/api/agent/undo-last", { conversationId: ctx.conversationId })
+          : await api.post<Record<string, unknown>>(`/api/agent/tasks/${tid}/${name.replace("_task", "")}`);
+    window.dispatchEvent(new Event(TASKS_REFRESH));
+    window.dispatchEvent(new Event(NUDGES_REFRESH)); // a task may have suggested a reminder
+    return compactTask(r);
+  }
   return { error: "unknown function" };
 }
+
+/** The Live model only needs what to say and what is pending, not every stored detail. */
+function compactTask(r: any): Record<string, unknown> {
+  const t = r?.task ?? r;
+  if (!t || !Array.isArray(t.steps)) return r;
+  return {
+    taskId: t.id,
+    status: t.status,
+    summary: t.summary,
+    error: t.error ?? undefined,
+    waitingFor: t.steps.find((s: any) => s.status === "awaiting_approval")?.tool,
+    steps: t.steps.map((s: any) => ({ tool: s.tool, status: s.status, why: s.why || undefined, result: JSON.stringify(s.result ?? null).slice(0, 1500), error: s.error || undefined })),
+    ...(r?.undone ? { undone: r.undone, failed: r.failed } : {}),
+  };
+}
+
+/** how long the ambient listener stays deaf after AURA's voice stops (room echo, echo-cancellation lag) */
+const ECHO_TAIL_MS = 1200;
+
+/** What ambient mode decided about the last thing it heard (see server/ambient.mjs). */
+export type AmbientDecision = {
+  action: "speak" | "wait" | "defer" | "suppress" | "answer" | "ignore" | "echo";
+  reason: string;
+  direction?: "rising" | "flat" | "falling" | "unknown";
+  level?: number;
+  slope?: number;
+  threshold?: number;
+  need?: number;
+  topic?: string;
+};
+export type AmbientInfo = {
+  on: boolean;
+  /** an utterance is being transcribed and scored */
+  busy: boolean;
+  last: AmbientDecision | null;
+  error: string | null;
+};
+
+type AmbientResult = { message: Message | null; addressed: boolean; decision: AmbientDecision; say?: string };
 
 export type UseLiveAPIResults = {
   status: LiveStatus;
@@ -214,6 +300,9 @@ export type UseLiveAPIResults = {
   removeDocument: (id: number) => Promise<void>;
   retryDocument: (id: number) => Promise<void>;
   lastDocumentLookup: { question: string; names: string[] } | null;
+  /** ambient mode: AURA listens in the background and speaks only when asked or when the need for it keeps rising */
+  ambient: AmbientInfo;
+  setAmbient: (on: boolean) => Promise<void>;
 };
 
 const QUOTA_RE = /quota|exceeded|resource.?exhausted|rate.?limit/i;
@@ -268,6 +357,14 @@ export function useLiveAPI(): UseLiveAPIResults {
   const [notice, setNotice] = useState<string | null>(null);
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [lastDocumentLookup, setLastDocumentLookup] = useState<UseLiveAPIResults["lastDocumentLookup"]>(null);
+  const [ambient, setAmbientInfo] = useState<AmbientInfo>({ on: false, busy: false, last: null, error: null });
+  const ambientOn = useRef(false);
+  const ambientRec = useRef<{ recorder: AudioRecorder; seg: Segmenter } | null>(null);
+  const ambientInFlight = useRef(0);
+  // The microphone also picks up AURA's own voice from the speakers. While AURA is talking, and for a moment
+  // after (room echo, echo-cancellation lag), the ambient listener hears nothing.
+  const mutedUntil = useRef(0);
+  const stopAmbientRef = useRef<() => void>(() => {});
   // documents to tell the running session about once they have been read
   const announce = useRef(new Set<number>());
   const documentsRef = useRef<DocumentInfo[]>([]);
@@ -565,7 +662,8 @@ export function useLiveAPI(): UseLiveAPIResults {
         // the new session's instructions already describe documents that have been read
         if (!resume) for (const d of documentsRef.current) if (d.status !== "analysing") announce.current.delete(d.id);
         setStatus("connected");
-        if (withMic) setMicOnState(true);
+        // in ambient mode the microphone goes to the ambient listener, not to the voice model
+        if (withMic && !ambientOn.current) setMicOnState(true);
         return true;
       } catch (e: any) {
         setStatus("disconnected");
@@ -591,6 +689,7 @@ export function useLiveAPI(): UseLiveAPIResults {
   connectRef.current = connect;
 
   const disconnect = useCallback(() => {
+    stopAmbientRef.current();
     userClosing.current = true;
     setMicOnState(false);
     audioStreamerRef.current?.stop();
@@ -629,11 +728,13 @@ export function useLiveAPI(): UseLiveAPIResults {
       } catch {}
       parts.push({ text: t });
       client.send(parts, true);
+      if (ambientOn.current && convIdRef.current) api.post(`/api/ambient/${convIdRef.current}/spoke`).catch(() => {});
     },
     [client, connect, finalize, persist, upsert]
   );
 
   const newConversation = useCallback(() => {
+    stopAmbientRef.current();
     if (client.status !== "disconnected") disconnect();
     client.resumptionHandle = null;
     convIdRef.current = null;
@@ -651,6 +752,7 @@ export function useLiveAPI(): UseLiveAPIResults {
   const continueConversation = useCallback(
     async (id: number) => {
       const c = await api.get<{ id: number; messages: Message[]; documents?: DocumentInfo[] }>(`/api/conversations/${id}`);
+      stopAmbientRef.current();
       if (client.status !== "disconnected") disconnect();
       client.resumptionHandle = null;
       convIdRef.current = c.id;
@@ -755,6 +857,105 @@ export function useLiveAPI(): UseLiveAPIResults {
     [status, client]
   );
 
+  // ---- ambient mode ---------------------------------------------------------------------------------
+  // The microphone goes to a local speech segmenter instead of the voice model. Each utterance is sent to the
+  // server, which transcribes it, scores the need for AURA and follows the trend of that need
+  // (server/ambient.mjs). AURA speaks only when it is spoken to or when the server says the need has risen
+  // past the threshold; the server then hands back the note for the voice model to answer.
+
+  /** Have the voice model answer a note from the app now (the note itself is not shown as a message). */
+  const speakNote = useCallback(
+    async (text: string) => {
+      if (client.status === "disconnected") {
+        const ok = await connectRef.current({ withMic: false });
+        if (!ok) return;
+      }
+      finalize(pendingUser);
+      finalize(pendingAssistant);
+      client.send([{ text }], true);
+    },
+    [client, finalize]
+  );
+
+  /** AURA is talking (its answer is being generated or its voice is still playing), or just stopped. */
+  const auraSpeaking = useCallback(() => {
+    const now = Date.now();
+    if (pendingAssistant.current || audioStreamerRef.current?.isSpeaking) mutedUntil.current = now + ECHO_TAIL_MS;
+    return now < mutedUntil.current;
+  }, []);
+
+  const heard = useCallback(
+    async (convId: number, seg: SpeechSegment) => {
+      if (auraSpeaking()) return; // (a piece that was cut just as AURA started talking)
+      ambientInFlight.current++;
+      setAmbientInfo((a) => ({ ...a, busy: true }));
+      try {
+        const r = await api.postAudio<AmbientResult>(`/api/ambient/${convId}/audio`, seg.pcm);
+        if (!ambientOn.current || convIdRef.current !== convId) return;
+        if (r.message) {
+          finalize(pendingUser);
+          upsert({ ...r.message, pending: false }); // already saved by the server
+        }
+        setAmbientInfo((a) => ({ ...a, last: r.decision, error: null }));
+        if (r.say) await speakNote(r.say);
+      } catch (e: any) {
+        if (ambientOn.current) setAmbientInfo((a) => ({ ...a, error: e.message }));
+      } finally {
+        ambientInFlight.current--;
+        setAmbientInfo((a) => ({ ...a, busy: ambientInFlight.current > 0 }));
+      }
+    },
+    [finalize, upsert, speakNote, auraSpeaking]
+  );
+
+  const stopAmbient = useCallback(() => {
+    const rec = ambientRec.current;
+    ambientRec.current = null;
+    if (rec) {
+      rec.recorder.stop();
+      rec.recorder.removeAllListeners();
+    }
+    if (ambientOn.current && convIdRef.current) api.post(`/api/ambient/${convIdRef.current}/stop`).catch(() => {});
+    ambientOn.current = false;
+    setMicVolume(0);
+    setAmbientInfo({ on: false, busy: false, last: null, error: null });
+  }, []);
+  stopAmbientRef.current = stopAmbient;
+
+  const setAmbient = useCallback(
+    async (on: boolean) => {
+      if (!on) return stopAmbient();
+      if (ambientOn.current) return;
+      ambientOn.current = true;
+      setAmbientInfo({ on: true, busy: false, last: null, error: null });
+      try {
+        const id = await ensureConversation();
+        await api.post(`/api/ambient/${id}/start`);
+        // the voice session stays open so AURA can speak at once, but it no longer hears the microphone
+        setMicOnState(false);
+        if (client.status === "disconnected") await connectRef.current({ withMic: false });
+        if (!ambientOn.current) return; // switched off meanwhile
+        const recorder = new AudioRecorder();
+        const seg = new Segmenter((s) => ambientOn.current && heard(id, s), { pauseMs: 900, maxMs: 15000, minVoicedMs: 500, preRollMs: 300 });
+        recorder
+          .on("pcm", (b: ArrayBuffer) => {
+            if (auraSpeaking()) seg.discard();
+            else seg.push(b);
+          })
+          .on("volume", setMicVolume);
+        ambientRec.current = { recorder, seg };
+        await recorder.start();
+        if (!ambientOn.current) recorder.stop();
+      } catch (e: any) {
+        stopAmbient();
+        setAmbientInfo((a) => ({ ...a, error: e.message }));
+      }
+    },
+    [client, ensureConversation, heard, stopAmbient, auraSpeaking]
+  );
+
+  useEffect(() => () => stopAmbientRef.current(), []);
+
   // tell a running session about a document once it has been read, so it can give an overview
   useEffect(() => {
     if (status !== "connected") return;
@@ -808,5 +1009,7 @@ export function useLiveAPI(): UseLiveAPIResults {
     removeDocument,
     retryDocument,
     lastDocumentLookup,
+    ambient,
+    setAmbient,
   };
 }

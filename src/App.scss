@@ -1119,6 +1119,59 @@ input[type="checkbox"] {
   color: var(--rec);
 }
 
+// ambient mode: AURA listens in the background
+.ambient-toggle--on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.msg--ambient {
+  .msg__bubble {
+    background: transparent;
+    border: 1px dashed var(--line);
+    color: var(--muted);
+    font-style: italic;
+  }
+}
+.ambient-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: var(--faint);
+  .material-symbols-outlined {
+    font-size: 15px;
+  }
+  &--rising .material-symbols-outlined {
+    color: var(--accent);
+  }
+  &--falling .material-symbols-outlined {
+    color: var(--info);
+  }
+}
+.ambient-trend__meter {
+  position: relative;
+  width: 34px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--raised);
+  overflow: visible;
+  > span {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+  }
+  > i {
+    position: absolute;
+    top: -2px;
+    width: 1px;
+    height: 8px;
+    background: var(--muted);
+  }
+}
+
 .composer__text {
   flex: 1;
   display: flex;
@@ -2405,3 +2458,13 @@ fieldset.field {
     animation: none;
   }
 }
+
+// agent tasks (components/AgentTasks)
+.tasks__steps {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font-size: 0.85em;
+}
+.tasks__step--failed, .tasks__step--rejected { color: var(--danger, #c0392b); }
+.tasks__step--skipped, .tasks__step--undone { opacity: 0.6; text-decoration: line-through; }
+.tasks__step--awaiting_approval { font-weight: 600; }

@@ -107,11 +107,11 @@ export function updateConversation(id, { title, pinned }) {
 
 /** Earlier messages, formatted for the assistant when a conversation is continued. */
 export function historyForPrompt(id, maxChars = 8000) {
-  const rows = db.prepare("SELECT role, text FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 60").all(id);
+  const rows = db.prepare("SELECT role, modality, text FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 60").all(id);
   const lines = [];
   let used = 0;
   for (const r of rows) {
-    const line = `${r.role === "user" ? "User" : "AURA"}: ${r.text}`;
+    const line = `${r.role === "assistant" ? "AURA" : r.modality === "ambient" ? "Overheard" : "User"}: ${r.text}`;
     if (used + line.length > maxChars) break;
     lines.unshift(line);
     used += line.length;

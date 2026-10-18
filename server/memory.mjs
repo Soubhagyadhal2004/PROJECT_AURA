@@ -3,6 +3,7 @@ import { db, now, f32ToBlob, blobToF32, getSettings } from "./db.mjs";
 import { embedText, cosine } from "./models.mjs";
 import { generateJSON, hasKey } from "./gemini.mjs";
 import { EventEmitter } from "node:events";
+import * as chrono from "chrono-node";
 
 // Instrumentation: extraction calls, applied operations and the user's review decisions.
 // Nothing in the app depends on it; the evaluation harness (eval/) listens to it.
@@ -158,7 +159,57 @@ async function supersede(oldId, content, category, origin) {
  * Semantic search over active memories. Falls back to keyword overlap when the
  * local embedding model is unavailable.
  */
-export async function searchMemories(query, k = 6, { includeInactive = false, minScore: floor } = {}) {
+export async function searchMemories(query, k = 6, { includeInactive = false, minScore: floor, temporal = false } = {}) {
+  if (temporal) return temporalRank(await searchMemoriesBase(query, Math.max(k * 2, 10), { includeInactive, minScore: floor }), k);
+  return searchMemoriesBase(query, k, { includeInactive, minScore: floor });
+}
+
+// ---- time awareness (opt-in: the app's lookups use it; the evaluation harness keeps the plain ranking) ----
+const DAY = 86_400_000;
+const CHANGING = ["work", "people", "plan"];
+export const STALE_AFTER_DAYS = Number(process.env.AURA_MEMORY_STALE_DAYS || 180);
+
+/** A specific calendar day named in the fact (e.g. "on 10 Nov 2026"), or null. Only explicit day+month count. */
+export function namedDay(text, ref = Date.now()) {
+  for (const r of chrono.parse(String(text || ""), new Date(ref))) {
+    if (r.start.isCertain("day") && r.start.isCertain("month")) {
+      const d = r.start.date();
+      if (!r.start.isCertain("year")) continue; // "5 March" could be a yearly date (a birthday): not judged
+      return d.getTime();
+    }
+  }
+  return null;
+}
+
+/**
+ * How current a memory is likely to be. Returns { ageDays, mayBeOutdated, why }.
+ *   - a plan whose explicit date has passed is probably done or changed;
+ *   - facts that tend to change (work, people, plans) not confirmed for STALE_AFTER_DAYS may be outdated.
+ */
+export function freshness(m, at = Date.now()) {
+  const ageDays = Math.max(0, Math.floor((at - (m.updatedAt ?? m.updated_at ?? at)) / DAY));
+  if (m.category === "plan") {
+    const d = namedDay(m.content, m.createdAt ?? m.created_at ?? at);
+    if (d && d < at - DAY) return { ageDays, mayBeOutdated: true, why: "its date has passed" };
+  }
+  if (CHANGING.includes(m.category) && ageDays > STALE_AFTER_DAYS) return { ageDays, mayBeOutdated: true, why: `not confirmed for ${ageDays} days` };
+  return { ageDays, mayBeOutdated: false };
+}
+
+/** Re-rank: among similar matches the more recently confirmed fact of a changing kind comes first. */
+export function temporalRank(results, k, at = Date.now()) {
+  return results
+    .map((r) => {
+      const f = freshness(r, at);
+      const recency = CHANGING.includes(r.category) ? 0.05 * Math.exp(-f.ageDays / 365) : 0;
+      const penalty = f.mayBeOutdated ? 0.05 : 0;
+      return { ...r, ...f, score: r.score + recency - penalty, matchScore: r.score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
+}
+
+async function searchMemoriesBase(query, k = 6, { includeInactive = false, minScore: floor } = {}) {
   const rows = db
     .prepare(`SELECT * FROM memories ${includeInactive ? "" : "WHERE status = 'active'"}`)
     .all();
@@ -275,12 +326,12 @@ export async function extractFromConversation(conversationId) {
   const conv = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
   if (!conv) return [];
   const fresh = db
-    .prepare("SELECT * FROM messages WHERE conversation_id = ? AND id > ? ORDER BY id")
+    .prepare("SELECT * FROM messages WHERE conversation_id = ? AND id > ? AND modality != 'ambient' ORDER BY id")  // overheard lines (ambient mode) may be other people
     .all(conversationId, conv.extracted_upto);
   if (!fresh.some((m) => m.role === "user")) return [];
   const lastId = fresh[fresh.length - 1].id;
   const before = db
-    .prepare("SELECT * FROM messages WHERE conversation_id = ? AND id <= ? ORDER BY id DESC LIMIT 6")
+    .prepare("SELECT * FROM messages WHERE conversation_id = ? AND id <= ? AND modality != 'ambient' ORDER BY id DESC LIMIT 6")
     .all(conversationId, conv.extracted_upto)
     .reverse();
 

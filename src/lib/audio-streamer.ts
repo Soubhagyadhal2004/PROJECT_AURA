@@ -37,6 +37,11 @@ export class AudioStreamer {
 
   public onComplete = () => {};
 
+  /** True while audio is queued or scheduled and has not finished playing (false again once it runs out). */
+  get isSpeaking(): boolean {
+    return this.audioQueue.length > 0 || this.scheduledTime > this.context.currentTime;
+  }
+
   constructor(public context: AudioContext) {
     this.gainNode = this.context.createGain();
     this.source = this.context.createBufferSource();

@@ -5,8 +5,10 @@ import { api, Conversation, DocumentInfo, Message } from "../lib/api";
 import { dateTime } from "../lib/format";
 import Orb from "../components/Orb";
 import MemoryReview from "../components/MemoryReview";
+import AgentTasks from "../components/AgentTasks";
 import { ConversationActions, ConversationTitle } from "../components/ConversationActions";
 import { AttachMenu, DocumentCard } from "../components/Documents";
+import { AmbientInfo } from "../hooks/use-live-api";
 
 type Props = {
   historyId: number | null;
@@ -70,11 +72,19 @@ function MessageList({
             />
           </div>
         ) : (
-        <div key={m.id ?? `${i}-${m.createdAt}`} className={cn("msg", `msg--${m.role}`, { "msg--pending": m.pending })}>
+        <div
+          key={m.id ?? `${i}-${m.createdAt}`}
+          className={cn("msg", `msg--${m.role}`, { "msg--pending": m.pending, "msg--ambient": m.modality === "ambient" })}
+        >
           <div className="msg__bubble">{m.text}</div>
           {m.role === "assistant" && (m.sources?.length || m.searchQueries?.length) ? <WebSources m={m} /> : null}
           <div className="msg__meta">
-            {m.role === "user" ? "You" : "AURA"}
+            {m.modality === "ambient" ? "Overheard" : m.role === "user" ? "You" : "AURA"}
+            {m.modality === "ambient" && (
+              <span className="material-symbols-outlined msg__icon" title="Heard in ambient mode, not said to AURA">
+                hearing
+              </span>
+            )}
             {m.modality === "voice" && (
               <span className="material-symbols-outlined msg__icon" title="Spoken">
                 mic
@@ -150,9 +160,11 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
   const dragDepth = useRef(0);
 
   const connected = status === "connected";
+  const ambient = live.ambient;
   const speaking = connected && outVolume > 0.01;
-  const tone = speaking ? "speaking" : connected && micOn ? "listening" : "idle";
-  const level = speaking ? outVolume * 6 : micOn ? micVolume * 6 : 0;
+  const hearing = ambient.on || (connected && micOn);
+  const tone = speaking ? "speaking" : hearing ? "listening" : "idle";
+  const level = speaking ? outVolume * 6 : hearing ? micVolume * 6 : 0;
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -206,7 +218,11 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
   };
 
   const stateText =
-    status === "connecting"
+    ambient.on && !speaking
+      ? ambient.busy
+        ? "Ambient: thinking it over…"
+        : "Ambient: listening quietly. Say “Aura” to ask."
+      : status === "connecting"
       ? "Connecting to Gemini Live…"
       : !connected
         ? "Voice is off"
@@ -309,13 +325,29 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
         </div>
       )}
 
+      {ambient.error && (
+        <div className="banner banner--error" role="alert">
+          <span className="material-symbols-outlined">hearing_disabled</span>
+          <span>Ambient mode: {ambient.error}</span>
+          <span className="banner__actions">
+            {!ambient.on && (
+              <button className="btn btn--small" onClick={() => live.setAmbient(true)}>
+                Try again
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+
       <div className="assistant__body">
         {messages.length === 0 ? (
           <div className="assistant__empty">
             <Orb size={168} level={level} active={connected} tone={tone} logo />
-            <h2>{connected ? "I'm listening." : "Hi, I'm AURA."}</h2>
+            <h2>{ambient.on ? "I'm here, quietly." : connected ? "I'm listening." : "Hi, I'm AURA."}</h2>
             <p>
-              {connected
+              {ambient.on
+                ? "Carry on talking. I'll stay silent unless you say “Aura”, or I can clearly help with what you're discussing."
+                : connected
                 ? "Ask anything, or tell me something worth remembering."
                 : "Start a voice session or type a message below. Tell me about yourself and I'll remember it next time."}
             </p>
@@ -342,6 +374,7 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
         )}
       </div>
 
+      <AgentTasks conversationId={live.conversationId} />
       <MemoryReview compact signal={memoryReviews} />
 
       <footer className="composer">
@@ -359,18 +392,31 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
             </span>
           </button>
           <button
-            className={cn("icon-button mic-toggle", { "mic-toggle--off": !micOn })}
+            className={cn("icon-button mic-toggle", { "mic-toggle--off": !micOn && !ambient.on })}
             onClick={() => live.setMicOn(!micOn)}
-            disabled={!connected}
+            disabled={!connected || ambient.on}
             aria-pressed={micOn}
             aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
             title={micOn ? "Mute microphone" : "Unmute microphone"}
           >
-            <span className="material-symbols-outlined">{micOn ? "mic" : "mic_off"}</span>
+            <span className="material-symbols-outlined">{micOn || ambient.on ? "mic" : "mic_off"}</span>
+          </button>
+          <button
+            className={cn("icon-button ambient-toggle", { "ambient-toggle--on": ambient.on })}
+            onClick={() => live.setAmbient(!ambient.on)}
+            disabled={status === "connecting" && !ambient.on}
+            aria-pressed={ambient.on}
+            aria-label={ambient.on ? "Leave ambient mode" : "Ambient mode: stay quiet in the background"}
+            title={ambient.on ? "Leave ambient mode" : "Ambient mode: AURA stays quiet in the background and speaks only when asked or clearly needed"}
+          >
+            <span className="material-symbols-outlined">{ambient.on ? "hearing" : "hearing_disabled"}</span>
           </button>
           <div className="composer__state">
-            <span className={cn("live-dot", { "live-dot--on": connected && micOn })} />
-            {stateText}
+            <span className={cn("live-dot", { "live-dot--on": hearing })} />
+            <span>
+              {stateText}
+              {ambient.on && <AmbientTrend info={ambient} />}
+            </span>
           </div>
         </div>
         <form className="composer__text" onSubmit={submit}>
@@ -390,6 +436,33 @@ function LiveConversation({ onChanged, version, memoryReviews }: { onChanged: ()
         </form>
       </footer>
     </section>
+  );
+}
+
+const TREND_ICON = { rising: "trending_up", flat: "trending_flat", falling: "trending_down", unknown: "more_horiz" } as const;
+const ACTION_TEXT: Record<string, string> = {
+  speak: "chipping in",
+  wait: "need building",
+  defer: "steady: holding",
+  suppress: "passing: holding back",
+  answer: "answering you",
+  ignore: "",
+};
+
+/** How much AURA's help is needed right now, its direction, and what ambient mode decided. */
+function AmbientTrend({ info }: { info: AmbientInfo }) {
+  const d = info.last;
+  if (!d || d.level == null) return null;
+  const dir = d.direction || "unknown";
+  return (
+    <span className={cn("ambient-trend", `ambient-trend--${dir}`)} title={`${d.reason}${d.topic ? ` · topic: ${d.topic}` : ""}`}>
+      <span className="material-symbols-outlined">{TREND_ICON[dir]}</span>
+      <span className="ambient-trend__meter" aria-hidden="true">
+        <span style={{ width: `${Math.round((d.level ?? 0) * 100)}%` }} />
+        {d.threshold != null && <i style={{ left: `${Math.round(d.threshold * 100)}%` }} />}
+      </span>
+      {ACTION_TEXT[d.action] || d.action}
+    </span>
   );
 }
 

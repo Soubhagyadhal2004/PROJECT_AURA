@@ -17,7 +17,7 @@
     "build": "react-scripts build",
     "serve": "node server/index.mjs",
     "test": "react-scripts test",
-    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs server/tests/proactive.test.mjs",
+    "test:server": "node --experimental-test-module-mocks --no-warnings --test server/tests/pipeline.test.mjs server/tests/turns.test.mjs server/tests/proactive.test.mjs server/tests/ambient.test.mjs server/tests/voicegate.test.mjs server/tests/agent.test.mjs",
     "eval:gate": "node --no-warnings --import ./eval/lib/register.mjs eval/run-gate-sim.mjs",
     "eval:gate:fix": "node --no-warnings --import ./eval/lib/register.mjs eval/run-gate-sim.mjs --extract-min-score 0",
     "eval:retrieval": "node --no-warnings --import ./eval/lib/register.mjs eval/run-retrieval.mjs",

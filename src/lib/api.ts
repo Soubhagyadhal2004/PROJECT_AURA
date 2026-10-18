@@ -96,7 +96,7 @@ export type Health = {
 export type Message = {
   id?: number;
   role: "user" | "assistant";
-  modality?: "voice" | "text" | "document";
+  modality?: "voice" | "text" | "document" | "ambient"; // ambient: overheard in ambient mode, not said to AURA
   text: string;
   // a document the user added (modality "document")
   document?: { id: number; name: string };

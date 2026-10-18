@@ -68,6 +68,15 @@ export class Segmenter {
     if (this.silenceMs >= this.opts.pauseMs || lenMs >= this.opts.maxMs) this.cut();
   }
 
+  /** throw away what is buffered, without emitting it (used while AURA itself is talking) */
+  discard() {
+    this.inSpeech = false;
+    this.chunks = [];
+    this.preRoll = [];
+    this.silenceMs = 0;
+    this.voicedMs = 0;
+  }
+
   /** emit whatever is buffered (call when recording stops) */
   flush() {
     if (this.inSpeech) this.cut();

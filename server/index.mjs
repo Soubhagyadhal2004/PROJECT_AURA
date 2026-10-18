@@ -15,6 +15,8 @@ import * as notes from "./meeting-notes.mjs";
 import * as docs from "./documents.mjs";
 import { ACCEPT } from "./doc-text.mjs";
 import * as proactive from "./proactive.mjs";
+import * as ambient from "./ambient.mjs";
+import * as agent from "./agent.mjs";
 
 // ---- tiny router ---------------------------------------------------------------------
 const routes = [];
@@ -97,9 +99,12 @@ app.get("/api/live/setup", h((req) => {
     ``,
     `If the user asks about something personal that is not listed above, call the recall_memories tool before answering.`,
     `Never invent memories. If memories disagree, trust the most recently confirmed one and mention the change if relevant.`,
+    `A recalled memory marked mayBeOutdated (an old fact that tends to change, or a plan whose date has passed) must not be stated as current: say what you last knew and when, and ask if it is still true.`,
     ``,
     `The user records meetings with AURA's Meeting Mode. When they ask about a meeting (by date, a weekday like "last Wednesday", "yesterday", a topic or a person), call find_meetings with explicit dates you work out from the current date above, then call get_meeting for the one(s) that fit before answering questions about what was said, decided or assigned.`,
     `Base meeting answers only on what those tools return. If no meeting matches, say so. Speaker names in transcripts come from voice recognition and can be wrong.`,
+    ``,
+    `For a request that needs several lookups or actions in a row (for example "check my meetings this week and remind me of the action items", or "find what we decided about X and remember it"), call run_task with the goal instead of many single tools. Tell the user its summary in one or two sentences. If it returns awaiting_approval, say what it wants to do and ask; call approve_task only after a clear yes, otherwise reject_task. If the user says stop, call cancel_task; if they say undo that, call undo_last_task. Never claim a task did something its steps don't show.`,
     ``,
     `The user can add documents (PDF, Word, PowerPoint, Excel, text, images) to the conversation. For any question about a document's contents, call ask_document (with document_id, or without it to look across all of them) and answer from its result; you cannot see the documents yourself. If it says the answer isn't in the document, tell the user so. Mention page or section when the result gives it. Notes in square brackets starting with "[AURA app]" come from the app, not from the user.`,
     ``,
@@ -114,6 +119,7 @@ app.get("/api/live/setup", h((req) => {
     ? `${systemInstruction}\n\nThe user is continuing an earlier conversation. What was said before (oldest first):\n${earlier}\n\nPick up naturally from there; don't repeat or summarise it unless asked.`
     : systemInstruction;
   if (docLines.length) full += `\n\nDocuments the user added to this conversation:\n${docLines.join("\n")}`;
+  full += `\n\nAmbient mode: the user can switch AURA to ambient mode, where you stay silent in the background and the app does the listening. You then only receive notes starting with "[AURA app] Ambient mode": either someone spoke to you directly, or the app judged that your help is now clearly needed. Answer such a note in one or two short spoken sentences (use tools if needed) and then stay quiet; never mention the note itself.`;
   full += proactive.switches().reminders
     ? `\n\nReminders: when the user asks to be reminded of something (or to set a reminder or alarm), call set_reminder with what it is for and when, in their words (e.g. "tomorrow at 5pm", "in 20 minutes"). Then read back the exact day and time it returns and ask the user to confirm. Only after a clear yes, call confirm_reminder with the reminderId; if they say no or want a different time, call cancel_reminder (and set_reminder again for a new time). Never say a reminder is set unless confirm_reminder succeeded. When it is due, AURA shows the reminder in the app and reads it aloud (the AURA tab must be open); it cannot call the user's phone.`
     : `\n\nYou cannot set reminders, alarms or timers in this app. If asked, say so plainly and do not promise to remind the user.`;
@@ -196,7 +202,7 @@ app.get("/api/documents/:id/file", (req, res) => {
 
 // ---- memory --------------------------------------------------------------------------------
 app.get("/api/memories", h(() => mem.listMemories()));
-app.get("/api/memories/search", h((req) => mem.searchMemories(String(req.query.q || ""), Number(req.query.k) || 6)));
+app.get("/api/memories/search", h((req) => mem.searchMemories(String(req.query.q || ""), Number(req.query.k) || 6, { temporal: true })));
 app.get("/api/memories/activity", h(() => mem.extractionLog));
 app.get("/api/memories/proposals", h(() => mem.listProposals()));
 app.post("/api/memories/proposals/:id/accept", h(async (req) => (await mem.acceptProposal(id(req), req.body || {})) || (() => { throw notFound(); })()));
@@ -292,6 +298,40 @@ app.post("/api/proactive/reminders/:id/confirm", h((req) => proactive.confirmRem
 app.post("/api/proactive/reminders/:id/cancel", h((req) => proactive.cancelReminder(id(req))));
 app.post("/api/nudges/:id/decide", h((req) => proactive.decide(id(req), req.body || {})));
 
+// ---- ambient mode (see server/ambient.mjs) ---------------------------------------------------------------
+app.get("/api/ambient/config", h(() => ambient.config()));
+app.get("/api/ambient/stats", h(() => ambient.stats()));
+app.post("/api/ambient/:id/start", h((req) => {
+  if (!conv.getConversation(id(req))) throw notFound();
+  return ambient.reset(id(req), { on: true });
+}));
+app.post("/api/ambient/:id/stop", h((req) => ambient.reset(id(req), { on: false })));
+app.get("/api/ambient/:id", h((req) => ({ ...ambient.state(id(req)), events: ambient.events(id(req), 30) })));
+// one utterance: as text ({ text }) or as 16 kHz PCM16 audio
+app.post("/api/ambient/:id/text", h((req) => ambient.observe(id(req), String(req.body?.text || ""))));
+app.post("/api/ambient/:id/audio", raw, h((req) => ambient.observeAudio(id(req), req.body)));
+// AURA spoke in this conversation (typed question answered, etc.): restart the trend and the cooldown
+app.post("/api/ambient/:id/spoke", h((req) => {
+  ambient.markSpoke(id(req));
+  return { ok: true };
+}));
+
+// ---- agent tasks (see server/agent.mjs): plan, run with approvals, cancel, undo --------------------------
+const optConv = (v) => (v == null || v === "" ? null : Number(v));
+app.get("/api/agent/stats", h(() => agent.stats()));
+app.get("/api/agent/tasks", h(() => agent.listTasks(30)));
+app.get("/api/agent/tasks/:id", h((req) => agent.getTask(id(req)) || (() => { throw notFound(); })()));
+app.post("/api/agent/tasks", h((req) => agent.startTask({ goal: req.body?.goal, steps: req.body?.steps ?? null, conversationId: optConv(req.body?.conversationId) })));
+app.post("/api/agent/tasks/:id/approve", h((req) => agent.approve(id(req))));
+app.post("/api/agent/tasks/:id/reject", h((req) => agent.reject(id(req))));
+app.post("/api/agent/tasks/:id/cancel", h((req) => agent.cancel(id(req))));
+app.post("/api/agent/tasks/:id/undo", h((req) => agent.undo(id(req))));
+app.post("/api/agent/undo-last", h(async (req) => {
+  const t = agent.lastUndoable(optConv(req.body?.conversationId));
+  if (!t) return { nothingToUndo: true };
+  return agent.undo(t);
+}));
+
 // ---- wipe everything -----------------------------------------------------------------------------
 app.delete("/api/data", h(() => ({
   memories: mem.deleteAllMemories(),
@@ -300,6 +340,7 @@ app.delete("/api/data", h(() => ({
   profiles: meet.listProfiles().map((p) => meet.deleteProfile(p.id)).length,
   documents: docs.cleanUpFiles(),
   nudges: proactive.deleteAllNudges(),
+  agentTasks: agent.deleteAllTasks(),
 })));
 
 // ---- static production build (npm run build && npm run serve) -------------------------------------
