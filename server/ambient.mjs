@@ -24,6 +24,7 @@
 //   AURA_AMBIENT_FOLLOWUP_SEC=25    after AURA spoke, a reply aimed at it is answered without saying its name
 //   AURA_AMBIENT_STALE_SEC=180      scores older than this are dropped (a long pause starts a new trend)
 //   AURA_AMBIENT_PERSIST=3          a need that stays high but flat for this many utterances in a row is finally spoken (0 = never)
+//   AURA_AMBIENT_FEEDBACK_SEC=45    how long after AURA chipped in on its own a short "not now" / "thanks" counts as feedback
 import { db } from "./db.mjs";
 import { getSettings } from "./db.mjs";
 import { generateJSON, hasKey, transcribeSegments } from "./gemini.mjs";
@@ -50,6 +51,7 @@ export function config() {
     smoothing: num("AURA_AMBIENT_SMOOTHING", 0.6, 0.05, 1),
     cooldownMs: num("AURA_AMBIENT_COOLDOWN_SEC", 60, 0) * 1000,
     followUpMs: num("AURA_AMBIENT_FOLLOWUP_SEC", 25, 0) * 1000,
+    feedbackMs: num("AURA_AMBIENT_FEEDBACK_SEC", 45, 5) * 1000,
     staleMs: num("AURA_AMBIENT_STALE_SEC", 180, 10) * 1000,
     persist: Math.round(num("AURA_AMBIENT_PERSIST", 3, 0, 20)),
   };
@@ -177,6 +179,7 @@ export function reset(conversationId, { on = true } = {}) {
 export function markSpoke(conversationId, at = Date.now()) {
   const s = session(conversationId);
   s.lastSpokeAt = at;
+  if (s.unpromptedAt > 0) s.unpromptedAt = at; // the reaction to an unprompted remark counts from when AURA stopped talking
   s.newTopic = false;
   newTrend(s, at); // the need it answered is spent; a new contribution needs a new rise
 }
@@ -386,8 +389,8 @@ export function events(conversationId, limit = 50) {
 
 /** Counts of decisions, for judging how often AURA held back. */
 // ---- learning from feedback ------------------------------------------------------------------------
-// Right after AURA chipped in on its own, "not now" / "stop" / "I didn't ask" raises the bar for the next
-// unprompted contribution; "thanks" / "good point" lowers it a little. The adjustment is kept on disk, fades
+// In the 45 seconds after AURA chipped in on its own (counted from when it stopped talking), a short "not now" /
+// "stop it" / "I didn't ask" raises the bar for the next unprompted contribution; "thanks" / "good point" lowers it a little. The adjustment is kept on disk, fades
 // after AURA_AMBIENT_FEEDBACK_DAYS (30) and stays within -0.1 .. +0.25 of the configured threshold.
 db.exec(`
 CREATE TABLE IF NOT EXISTS ambient_feedback (
@@ -398,11 +401,13 @@ CREATE TABLE IF NOT EXISTS ambient_feedback (
   text TEXT
 );
 `);
-const NEGATIVE = /\b(not now|stop( it| talking)?|be quiet|keep quiet|quiet|shut up|(i )?didn'?t ask( you)?|nobody asked|no one asked|go away|not you|leave it|not helpful|don'?t interrupt|stop interrupting)\b/i;
+const NEGATIVE = /\b(not now|be quiet|keep quiet|shut up|(i )?didn'?t ask( you)?|nobody asked|no one asked|go away|not you|leave it|not helpful|don'?t interrupt|stop interrupting|stop it|stop talking|that'?s enough)\b/i;
+const NEGATIVE_BARE = /^\W*(aura\W+)?(please\W+)?(stop|quiet|enough|shh+)\W*$/i; // "stop" alone, not "stop the car"
 const POSITIVE = /\b(thanks|thank you|good point|good one|helpful|that helps|nice|right,? (aura|thanks)|exactly)\b/i;
 export function feedbackOf(text) {
   const t = String(text || "");
-  if (NEGATIVE.test(t)) return "negative";
+  if (t.trim().split(/\s+/).length > 8) return null; // feedback is short; a long sentence is ordinary talk
+  if (NEGATIVE.test(t) || NEGATIVE_BARE.test(t)) return "negative";
   if (POSITIVE.test(t)) return "positive";
   return null;
 }
@@ -462,17 +467,19 @@ async function observeNow(conversationId, text, at) {
   const wake = mentionsAura(text);
 
   // the first reaction after AURA chipped in on its own tells whether that was welcome
-  if (s.unpromptedAt > 0 && at - s.unpromptedAt < cfg.followUpMs) {
+  // (any short line within the window can be the feedback, so a "come again?" in between doesn't use it up)
+  if (s.unpromptedAt > 0 && at - s.unpromptedAt >= cfg.feedbackMs) s.unpromptedAt = 0;
+  if (s.unpromptedAt > 0) {
     const fb = feedbackOf(text);
-    s.unpromptedAt = 0;
     if (fb) {
+      s.unpromptedAt = 0;
       recordFeedback(fb, text, at);
       if (fb === "negative") {
         const message = conv.addMessage(conversationId, { role: "user", text, modality: "ambient" });
         newTrend(s, at);
         // the cooldown restarts, but the next line is not taken as a reply to AURA (it is past the follow-up window)
         s.lastSpokeAt = at - cfg.followUpMs;
-        const decision = { action: "suppress", reason: "told AURA to hold back: it will wait for a clearer need next time", threshold: round(withFeedback(config(), at).threshold) };
+        const decision = { action: "suppress", feedback: "negative", reason: "told AURA to hold back: it will wait for a clearer need next time", threshold: round(withFeedback(config(), at).threshold) };
         logEvent({ conversationId, messageId: message.id, at, text, addressed: true, action: "suppress", reason: decision.reason });
         return { message, addressed: true, decision };
       }
@@ -551,7 +558,8 @@ export async function observeAudio(conversationId, pcm, at = Date.now()) {
   if (voice.requireAddressed) {
     // a clip too short to recognise a voice counts only when it is aimed at AURA
     const s = session(conversationId);
-    const followUp = s.lastSpokeAt > 0 && at - s.lastSpokeAt < config().followUpMs;
+    const c = config();
+    const followUp = (s.lastSpokeAt > 0 && at - s.lastSpokeAt < c.followUpMs) || (s.unpromptedAt > 0 && at - s.unpromptedAt < c.feedbackMs);
     if (!mentionsAura(text) && !followUp) {
       const decision = { action: "ignore", reason: voice.reason, voice: "short" };
       logEvent({ conversationId, at, text: "(short clip, voice unverified)", addressed: false, action: "ignore", reason: voice.reason });

@@ -93,8 +93,10 @@ export function heuristicRelation(newFact, oldFact) {
 export async function relationTo(newFact, oldFact) {
   // without a working comparison AURA can't be sure a new detail isn't a changed fact: it asks rather than overwrite
   if (!hasKey()) return heuristicRelation(newFact, oldFact);
+  const limitMs = Number(process.env.AURA_AGENT_COMPARE_TIMEOUT_MS) || 4000; // a slow model must not hold up the answer
+  let timer;
   try {
-    const r = await generateJSON({
+    const r = await Promise.race([generateJSON({
       system:
         "Compare two short facts about the same user. same = they say the same thing. contradicts = both cannot be true now (a changed value: new job, new city, different name, a moved date). different = they are about different things, or one adds detail without conflict.",
       prompt: `Existing fact: ${oldFact}\nNew fact: ${newFact}`,
@@ -103,11 +105,13 @@ export async function relationTo(newFact, oldFact) {
         properties: { relation: { type: "string", enum: ["same", "contradicts", "different"] }, reason: { type: "string" } },
         required: ["relation"],
       },
-    });
+    }), new Promise((_, rej) => (timer = setTimeout(() => rej(new Error(`no answer within ${limitMs} ms`)), limitMs)))]);
     return { relation: ["same", "contradicts", "different"].includes(r?.relation) ? r.relation : "different", reason: r?.reason || "" };
   } catch (e) {
     const h = heuristicRelation(newFact, oldFact);
     return { ...h, reason: `couldn't compare with the model (${e.message}); ${h.reason}` };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -525,7 +529,8 @@ async function summarise(taskId) {
     const asks = t.steps.filter((s) => s.result?.needsUserOk || s.result?.needsConfirmation);
     return asks.length ? "Done, but some changes wait for your OK on a card." : "Done.";
   };
-  if (!hasKey() || t.status === "awaiting_approval") return plain();
+  // A model call here only rewords what the voice model says itself, and costs 4-5 s per task. Opt in with AURA_AGENT_SUMMARY=model.
+  if (process.env.AURA_AGENT_SUMMARY !== "model" || !hasKey() || t.status === "awaiting_approval") return plain();
   try {
     const r = await generateJSON({
       system:
@@ -550,11 +555,24 @@ export async function approve(taskId) {
   return execute(taskId);
 }
 
-export function reject(taskId) {
+export async function reject(taskId) {
   const t = taskRow(taskId);
   if (!t) throw httpError(404, "No such task");
   const step = stepsOf(taskId).find((s) => s.status === "awaiting_approval");
-  if (!step) throw httpError(409, "Nothing in this task is waiting for approval.");
+  if (!step) {
+    // "no" after the task finished: it is a no to what the task still offers (reminder cards waiting for a yes)
+    const offered = stepsOf(taskId).filter((s) => s.tool === "set_reminder" && s.status === "done" && parse(s.result)?.needsConfirmation);
+    const declined = [];
+    for (const s of offered) {
+      const r = await proactive.cancelReminder(parse(s.result).reminderId).catch(() => null);
+      if (r?.cancelled) {
+        setStep(s.id, { status: "rejected" });
+        declined.push(parse(s.result).what);
+      }
+    }
+    if (!declined.length) throw httpError(409, "Nothing in this task is waiting for approval.");
+    return { ...getTask(taskId), declinedReminders: declined };
+  }
   setStep(step.id, { status: "rejected" });
   skipRest(taskId);
   setTask(taskId, { status: "rejected", summary: `OK, I won't ${step.tool.replace(/_/g, " ")}. Nothing after it was run.` });

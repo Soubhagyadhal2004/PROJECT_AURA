@@ -25,14 +25,16 @@ export default function AgentTasks({ conversationId }: { conversationId: number 
     window.addEventListener(TASKS_REFRESH, load);
     return () => window.removeEventListener(TASKS_REFRESH, load);
   }, [load, conversationId]);
-  // poll only while something is still running
-  const mine = tasks.filter((t) => conversationId != null && t.conversationId === conversationId);
-  const running = mine.some((t) => t.status === "running" || t.status === "planning");
+  // poll while a task is open (it may be approved by voice, or be running a long step)
+  const mine = tasks.filter(
+    (t) => (conversationId != null && t.conversationId === conversationId) || (t.conversationId == null && OPEN.includes(t.status))
+  );
+  const active = mine.some((t) => OPEN.includes(t.status));
   useEffect(() => {
-    if (!running) return;
+    if (!active) return;
     const iv = setInterval(load, 1500);
     return () => clearInterval(iv);
-  }, [running, load]);
+  }, [active, load]);
 
   const act = async (t: Task, what: "approve" | "reject" | "cancel" | "undo") => {
     setBusy(t.id);
@@ -42,7 +44,9 @@ export default function AgentTasks({ conversationId }: { conversationId: number 
       load();
       window.dispatchEvent(new Event("aura:nudges-refresh"));
     } catch (e: any) {
-      setError(e.message);
+      // "nothing is waiting" means it was already answered (for example by voice): just show the current state
+      if (/waiting for approval|No such task/.test(e.message)) load();
+      else setError(e.message);
     } finally {
       setBusy(null);
     }

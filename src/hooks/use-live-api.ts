@@ -106,6 +106,38 @@ const TASK_DECLARATIONS: FunctionDeclaration[] = [
     parameters: { type: Type.OBJECT, properties: { task_id: { type: Type.INTEGER, description: "id from run_task" } }, required: ["task_id"] },
   },
   {
+    name: "remember_fact",
+    description:
+      "Save or correct a fact about the user when they explicitly ask you to remember it, or tell you something you have wrong. Call it even when it contradicts what you know: never argue. If it conflicts with a saved fact, the app shows the user a card to confirm the change.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        content: { type: Type.STRING, description: "The fact as a short sentence about the user, e.g. \"The user's father is named Ramesh\"." },
+        category: { type: Type.STRING, description: "preference | personal | people | work | plan | other" },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "decide_memory_change",
+    description:
+      "The user answered the memory-change card out loud. accept=true when they clearly said yes/update it, accept=false when they said no/keep it as it is. Use the proposalId from remember_fact or run_task. This closes the card.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        proposal_id: { type: Type.INTEGER, description: "proposalId of the pending memory change" },
+        accept: { type: Type.BOOLEAN, description: "true = apply the change, false = keep the old fact" },
+      },
+      required: ["proposal_id", "accept"],
+    },
+  },
+  {
+    name: "write_minutes",
+    description:
+      "Write the minutes of a recorded meeting (summary, decisions, action items). Without meeting_id it uses the most recent meeting. It always waits for the user's OK on a card: tell them, and call approve_task only after a clear yes.",
+    parameters: { type: Type.OBJECT, properties: { meeting_id: { type: Type.INTEGER, description: "id from find_meetings (optional)" } } },
+  },
+  {
     name: "undo_last_task",
     description: "Undo what the last task in this conversation changed (new memories, reminders, pending reviews).",
     parameters: { type: Type.OBJECT, properties: {} },
@@ -116,6 +148,8 @@ const TOOL_DECLARATIONS = [recallDeclaration, findMeetingsDeclaration, getMeetin
 
 /** Tells the task panel to reload now. */
 export const TASKS_REFRESH = "aura:tasks-refresh";
+/** Tells the memory review card to reload now. */
+export const MEMORY_REVIEWS_REFRESH = "aura:memory-reviews-refresh";
 
 // reminder tools: only offered when AURA_PROACTIVE_REMINDERS=1 on the server
 const REMINDER_DECLARATIONS: FunctionDeclaration[] = [
@@ -215,8 +249,33 @@ async function runTool(name: string | undefined, args: any, ctx: ToolContext): P
   if (name === "get_meeting") {
     return api.get<Record<string, unknown>>(`/api/meetings/${Number(args?.meeting_id)}/brief`);
   }
+  if (name === "decide_memory_change") {
+    const pid = Number(args?.proposal_id);
+    const accept = args?.accept === true || args?.accept === "true";
+    const r = await api.post<Record<string, unknown>>(`/api/memories/proposals/${pid}/${accept ? "accept" : "reject"}`);
+    window.dispatchEvent(new Event(MEMORY_REVIEWS_REFRESH));
+    return { done: true, accepted: accept, result: r };
+  }
+  if (name === "remember_fact" || name === "write_minutes") {
+    const id = Number(args?.meeting_id);
+    const steps =
+      name === "remember_fact"
+        ? [{ tool: "remember", args: { content: String(args?.content || ""), category: args?.category }, why: "the user asked to remember this" }]
+        : Number.isFinite(id) && id > 0
+          ? [{ tool: "write_minutes", args: { meeting_id: id }, why: "the user asked for the minutes" }]
+          : [
+              { tool: "find_meetings", args: {}, why: "find the most recent meeting" },
+              { tool: "write_minutes", args: { meeting_id: "$1.meetings.0.id" }, why: "the user asked for the minutes of their last meeting" },
+            ];
+    const goal = name === "remember_fact" ? `Remember: ${args?.content}` : "Write the minutes of the meeting";
+    const r = await api.post<Record<string, unknown>>("/api/agent/tasks", { goal, steps, conversationId: ctx.conversationId });
+    window.dispatchEvent(new Event(TASKS_REFRESH));
+    window.dispatchEvent(new Event(MEMORY_REVIEWS_REFRESH));
+    return compactTask(r);
+  }
   if (name === "run_task" || name === "approve_task" || name === "reject_task" || name === "cancel_task" || name === "undo_last_task") {
     const tid = Number(args?.task_id);
+    setTimeout(() => window.dispatchEvent(new Event(TASKS_REFRESH)), 400); // the card shows "running" while a long step works
     const r =
       name === "run_task"
         ? await api.post<Record<string, unknown>>("/api/agent/tasks", { goal: String(args?.goal || ""), conversationId: ctx.conversationId })
@@ -225,6 +284,7 @@ async function runTool(name: string | undefined, args: any, ctx: ToolContext): P
           : await api.post<Record<string, unknown>>(`/api/agent/tasks/${tid}/${name.replace("_task", "")}`);
     window.dispatchEvent(new Event(TASKS_REFRESH));
     window.dispatchEvent(new Event(NUDGES_REFRESH)); // a task may have suggested a reminder
+    window.dispatchEvent(new Event(MEMORY_REVIEWS_REFRESH)); // or a memory change to review
     return compactTask(r);
   }
   return { error: "unknown function" };
@@ -241,6 +301,13 @@ function compactTask(r: any): Record<string, unknown> {
     error: t.error ?? undefined,
     waitingFor: t.steps.find((s: any) => s.status === "awaiting_approval")?.tool,
     steps: t.steps.map((s: any) => ({ tool: s.tool, status: s.status, why: s.why || undefined, result: JSON.stringify(s.result ?? null).slice(0, 1500), error: s.error || undefined })),
+    // what now waits for the user, with the ids the follow-up tools need
+    reminderCards: t.steps
+      .filter((s: any) => s.tool === "set_reminder" && s.result?.needsConfirmation)
+      .map((s: any) => ({ reminderId: s.result.reminderId, what: s.result.what, when: s.result.when, onYes: "confirm_reminder", onNo: "cancel_reminder" })),
+    memoryReviewCards: t.steps
+      .filter((s: any) => s.result?.needsUserOk && s.result?.proposalId)
+      .map((s: any) => ({ proposalId: s.result.proposalId, currentFact: s.result.conflictsWith, onYes: "decide_memory_change accept=true", onNo: "decide_memory_change accept=false" })),
     ...(r?.undone ? { undone: r.undone, failed: r.failed } : {}),
   };
 }
@@ -258,6 +325,7 @@ export type AmbientDecision = {
   threshold?: number;
   need?: number;
   topic?: string;
+  feedback?: "negative" | "positive";
 };
 export type AmbientInfo = {
   on: boolean;
@@ -549,6 +617,19 @@ export function useLiveAPI(): UseLiveAPIResults {
       finalize(pendingUser);
       finalize(pendingAssistant);
       turnSearch.current = null;
+      if (ambientOn.current && convIdRef.current) {
+        // the generation is done, the voice may still be playing: the user's reaction (and the follow-up window)
+        // count from the moment AURA stops talking
+        const convId = convIdRef.current;
+        let waited = 0;
+        const iv = setInterval(() => {
+          waited += 250;
+          if (!audioStreamerRef.current?.isSpeaking || waited > 90_000) {
+            clearInterval(iv);
+            if (ambientOn.current && convIdRef.current === convId) api.post(`/api/ambient/${convId}/spoke`).catch(() => {});
+          }
+        }, 250);
+      }
     };
     const onGrounding = (g: GroundingMetadata) => {
       turnSearch.current = mergeSearch(turnSearch.current, g);

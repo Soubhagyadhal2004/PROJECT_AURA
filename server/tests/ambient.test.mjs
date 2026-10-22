@@ -396,3 +396,51 @@ test("feedback: an ordinary line after AURA spoke is not feedback, and later lin
   await say(id, "stop the car near the gate"); // past the first reaction: not feedback
   assert.equal(A.thresholdAdjustment(), 0);
 });
+
+test("feedback: the reaction counts from when AURA stopped talking, not from when it decided to speak", async () => {
+  db.exec("DELETE FROM ambient_feedback");
+  const id = await newConv();
+  await j("POST", `/api/ambient/${id}/start`);
+  const t0 = Date.now() - 60_000;
+  script = [{ need: 0.3 }, { need: 0.7 }, { need: 0.9, contribution: "x" }];
+  const out = [];
+  for (const [i, t] of ["one thing", "another thing", "a third thing"].entries()) out.push(await A.observe(id, t, t0 + i * 1000));
+  assert.equal(out[2].decision.action, "speak"); // decided at t0 + 2 s
+  A.markSpoke(id, t0 + 40_000); // AURA's long answer ended 38 s later: the browser reports it
+  const r = await A.observe(id, "not now", t0 + 50_000); // 10 s after it stopped, 48 s after the decision
+  assert.equal(r.decision.action, "suppress");
+  assert.equal(r.decision.feedback, "negative");
+  assert.equal(A.thresholdAdjustment(t0 + 50_000), 0.05);
+  db.exec("DELETE FROM ambient_feedback");
+});
+
+test("feedback: 'come again?' first does not use up the chance; 'stop the car' is ordinary talk; long sentences are not feedback", async () => {
+  db.exec("DELETE FROM ambient_feedback");
+  assert.equal(A.feedbackOf("stop the car near the gate"), null);
+  assert.equal(A.feedbackOf("stop"), "negative");
+  assert.equal(A.feedbackOf("Aura, please stop."), "negative");
+  assert.equal(A.feedbackOf("I said not now to the waiter but he kept bringing the menu and then more chai"), null, "over 8 words");
+  const id = await newConv();
+  await j("POST", `/api/ambient/${id}/start`);
+  const t0 = Date.now() - 100_000;
+  script = [{ need: 0.3 }, { need: 0.7 }, { need: 0.9, contribution: "x" }, { need: 0.1 }];
+  for (const [i, t] of ["one thing", "another thing", "a third thing"].entries()) await A.observe(id, t, t0 + i * 1000);
+  A.markSpoke(id, t0 + 20_000); // AURA stopped talking
+  await A.observe(id, "come again?", t0 + 30_000); // a reply to AURA, not feedback
+  assert.equal(A.thresholdAdjustment(t0 + 40_000), 0);
+  const r = await A.observe(id, "not now", t0 + 55_000); // 35 s after it stopped: still inside the 45 s window
+  assert.equal(r.decision.feedback, "negative");
+  assert.equal(A.thresholdAdjustment(t0 + 55_000), 0.05);
+  db.exec("DELETE FROM ambient_feedback");
+});
+
+test("feedback: after the window has passed, 'not now' is just talk", async () => {
+  db.exec("DELETE FROM ambient_feedback");
+  const id = await newConv();
+  const t0 = Date.now() - 200_000;
+  script = [{ need: 0.3 }, { need: 0.7 }, { need: 0.9, contribution: "x" }, { need: 0.1 }];
+  for (const [i, t] of ["one thing", "another thing", "a third thing"].entries()) await A.observe(id, t, t0 + i * 1000);
+  A.markSpoke(id, t0 + 10_000);
+  await A.observe(id, "not now", t0 + 10_000 + 46_000);
+  assert.equal(A.thresholdAdjustment(t0 + 60_000), 0);
+});

@@ -53,6 +53,7 @@ mock.module(new URL("../gemini.mjs", import.meta.url).href, {
       }
       if (/Compare two short facts/.test(system)) {
         if (relation === "throw") throw new Error("fetch failed");
+        if (relation === "slow") await new Promise((r) => setTimeout(r, 1500));
         return { relation, reason: "test" };
       }
       if (/Tell the user/.test(system)) {
@@ -103,6 +104,7 @@ test("a task the tools can't do fails honestly instead of improvising", async ()
 // ---- running ---------------------------------------------------------------------------------------
 
 test("read and reversible steps run on their own; every step is logged with why it ran", async () => {
+  process.env.AURA_AGENT_SUMMARY = "model";
   plans = [{ steps: [step("recall_memories", { query: "exam" }, "check what is known"), step("remember", { content: "The user's exam is on 3 December", category: "plan" }, "user said so")] }];
   const t = await A.startTask({ goal: "remember that my exam is on 3 December" });
   assert.equal(t.status, "done");
@@ -110,6 +112,7 @@ test("read and reversible steps run on their own; every step is logged with why 
   assert.equal(t.steps[0].why, "check what is known");
   assert.equal(t.steps[1].result.saved, true);
   assert.equal(t.summary, "summary from the results");
+  delete process.env.AURA_AGENT_SUMMARY;
   assert.equal(mem.listMemories().filter((m) => m.status === "active").length, 1);
 });
 
@@ -120,7 +123,7 @@ test("a consequential step waits for the user's yes; rejecting it runs nothing a
   assert.equal(t.status, "awaiting_approval");
   assert.equal(t.steps[0].status, "awaiting_approval");
   assert.match(t.summary ?? "", /OK/);
-  const r = A.reject(t.id);
+  const r = await A.reject(t.id);
   assert.equal(r.status, "rejected");
   assert.deepEqual(r.steps.map((s) => s.status), ["rejected", "skipped"]);
   assert.equal(ran, 0);
@@ -315,4 +318,28 @@ test("without the model: a changed value is asked about, an unrelated fact is no
 test("find_meetings hands its meetings straight to the next step", async () => {
   const r = await A.TOOLS.find_meetings.run({});
   assert.ok(Array.isArray(r.meetings));
+});
+
+test("saying no after a task suggested a reminder declines the card", async () => {
+  const t = await A.startTask({ goal: "g", steps: [{ tool: "set_reminder", args: { what: "pay rent", when: "tomorrow at 9am" } }] });
+  const id = t.steps[0].result.reminderId;
+  assert.equal(db.prepare("SELECT status FROM nudges WHERE id = ?").get(id).status, "shown");
+  const r = await A.reject(t.id);
+  assert.deepEqual(r.declinedReminders, ["pay rent"]);
+  assert.equal(db.prepare("SELECT status FROM nudges WHERE id = ?").get(id).status, "dismissed");
+  await assert.rejects(() => A.reject(t.id), /Nothing in this task/);
+});
+
+test("speed: no extra model call for the summary by default, and a slow comparison is cut off and asks the user", async () => {
+  await mem.addMemory({ content: "The user works at Infosys in Pune", category: "work" });
+  relation = "slow";
+  process.env.AURA_AGENT_COMPARE_TIMEOUT_MS = "50";
+  const t0 = Date.now();
+  const t = await A.startTask({ goal: "g", steps: [{ tool: "remember", args: { content: "The user works at TCS in Pune", category: "work" } }] });
+  delete process.env.AURA_AGENT_COMPARE_TIMEOUT_MS;
+  assert.ok(Date.now() - t0 < 1200, "did not wait for the slow model");
+  assert.equal(t.steps[0].result.needsUserOk, true);
+  assert.match(t.steps[0].result.reason, /no answer within 50 ms/);
+  assert.equal(calls.summary, 0, "the summary model call is off by default");
+  assert.ok(t.summary);
 });

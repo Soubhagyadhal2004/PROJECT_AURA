@@ -452,6 +452,14 @@ const ACTION_TEXT: Record<string, string> = {
 /** How much AURA's help is needed right now, its direction, and what ambient mode decided. */
 function AmbientTrend({ info }: { info: AmbientInfo }) {
   const d = info.last;
+  if (d?.feedback === "negative") {
+    return (
+      <span className="ambient-trend ambient-trend--falling" title={d.reason}>
+        <span className="material-symbols-outlined">do_not_disturb_on</span>
+        holding back · bar now {Math.round((d.threshold ?? 0) * 100)}%
+      </span>
+    );
+  }
   if (!d || d.level == null) return null;
   const dir = d.direction || "unknown";
   return (

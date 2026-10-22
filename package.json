@@ -29,6 +29,7 @@
     "eval:results": "node eval/build-results.mjs",
     "eval:compare": "node eval/compare-variants.mjs",
     "eval:compare-lme": "node eval/compare-lme.mjs",
+    "smoke": "node --no-warnings scripts/smoke-new-features.mjs",
     "test:desktop": "node --test desktop/tests/server-process.test.cjs",
     "desktop": "npm run build && electron .",
     "desktop:start": "electron .",

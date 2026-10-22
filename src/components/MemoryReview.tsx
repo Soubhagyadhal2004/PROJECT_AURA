@@ -27,6 +27,10 @@ export default function MemoryReview({
       .catch(() => {});
   }, []);
   useEffect(load, [load, signal]);
+  useEffect(() => {
+    window.addEventListener("aura:memory-reviews-refresh", load);
+    return () => window.removeEventListener("aura:memory-reviews-refresh", load);
+  }, [load]);
 
   const decide = async (p: MemoryProposal, accept: boolean) => {
     setBusy(p.id);
